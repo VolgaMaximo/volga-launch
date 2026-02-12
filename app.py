@@ -314,7 +314,7 @@ self.addEventListener('fetch', (e) => {
 def html_page(body: str) -> str:
     # (5) защита от двойного сабмита: disable submit после отправки
     # (9) подключаем manifest и регистрируем service worker
-    return f"""<!doctype html>
+    return """<!doctype html>
 <html lang="ru">
 <head>
 <meta charset="utf-8">
@@ -338,7 +338,7 @@ def html_page(body: str) -> str:
 </style>
 </head>
 <body>
-{body}
+""" + body + """
 
 <script>
 (function(){
@@ -1260,3 +1260,4 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
