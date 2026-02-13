@@ -326,17 +326,18 @@ def html_page(body: str) -> str:
 <meta name="theme-color" content="#ffffff">
 
 <style>
-:root {
-  --volga-blue: #0E238E;
-  --volga-red: #E73F24;
-  --volga-beige: #EDE7D3;
+:root{
+  --volga-blue:#0E238E;
+  --volga-red:#E73F24;
+  --volga-burgundy:#8E2C1F;
+  --volga-bg:#EDE7D3;
 }
 
 * { box-sizing: border-box; }
   body { font-family: -apple-system, system-ui, Arial;
   margin: 18px;
-  background: var(--volga-beige);
-  color: #111; }
+  background: var(--volga-bg);
+  color: var(--volga-blue); }
 .card {
   background: transparent;
   border: 2px solid var(--volga-blue);
@@ -356,7 +357,7 @@ h1 small {
   font-weight: 700;
 }
 
-  label { display:block; margin-top:10px; font-weight:600; overflow-wrap:anywhere; }
+  label { display:block; margin-top:10px; font-weight:600; overflow-wrap:anywhere; color: var(--volga-blue) }
   input, select, textarea { 
   width: 100%;
   max-width: 520px;
@@ -382,11 +383,13 @@ button:hover {
 }
 
   .row { display:grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 12px; }
-  .muted { color:#666; }
+  .muted { color: var(--volga-burgundy); }
   .pill { display:inline-block; padding:6px 10px; border-radius:999px; border:1px solid #ddd; margin-right:8px; }
-  .danger { color:#b00; }
-  small { color:#666; }
-  a { color:#06c; text-decoration:none; }
+  .danger { color: var(--volga-red);
+  font-weight:700; }
+  small { color: var(--volga-burgundy); }
+  a { color: var(--volga-blue);
+  text-decoration:none; }
 .row > div {
   max-width: 520px;
 }
@@ -1311,6 +1314,7 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
