@@ -324,15 +324,36 @@ def html_page(body: str) -> str:
 <meta name="theme-color" content="#ffffff">
 
 <style>
+:root {
+  --volga-blue: #0E238E;
+  --volga-red: #E73F24;
+  --volga-beige: #EDE7D3;
+}
+
 * { box-sizing: border-box; }
-  body { font-family: -apple-system, system-ui, Arial; margin: 18px; max-width: 920px; }
-.card { 
-  border: 1px solid #ddd; 
-  border-radius: 14px; 
-  padding: 20px; 
-  margin: 20px auto; 
+  body { font-family: -apple-system, system-ui, Arial;
+  margin: 18px;
+  background: var(--volga-beige);
+  color: #111; }
+.card {
+  background: transparent;
+  border: 2px solid var(--volga-blue);
+  border-radius: 14px;
+  padding: 28px;
+  margin: 30px auto;
   max-width: 900px;
 }
+h1 {
+  color: var(--volga-blue);
+  font-weight: 800;
+  letter-spacing: 1px;
+}
+
+h1 small {
+  color: var(--volga-red);
+  font-weight: 600;
+}
+
   label { display:block; margin-top:10px; font-weight:600; overflow-wrap:anywhere; }
   input, select, textarea { 
   width: 100%;
@@ -343,9 +364,21 @@ def html_page(body: str) -> str:
 }
 
 button {
-  padding: 12px 18px;
+  background: var(--volga-red);
+  color: white;
+  border: none;
+  border-radius: 10px;
+  padding: 14px 24px;
   font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: 0.2s ease;
 }
+
+button:hover {
+  background: var(--volga-blue);
+}
+
   .row { display:grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 12px; }
   .muted { color:#666; }
   .pill { display:inline-block; padding:6px 10px; border-radius:999px; border:1px solid #ddd; margin-right:8px; }
@@ -355,6 +388,12 @@ button {
 .row > div {
   max-width: 520px;
 }
+
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border: 2px solid var(--volga-blue);
+}
+
 </style>
 </head>
 <body>
@@ -1266,6 +1305,7 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
