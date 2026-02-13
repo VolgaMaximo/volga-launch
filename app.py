@@ -427,9 +427,17 @@ input:focus, select:focus, textarea:focus {
   outline: none;
   border: 2px solid var(--volga-blue);
 }
+
+
 @media (max-width: 700px){
+  .card { padding: 18px; }    
   .row { grid-template-columns: 1fr; }
-}
+  .row > div { max-width: none; }
+  input, select, textarea {
+    max-width: 100%;
+    width: 100%;
+  }
+
 
 </style>
 </head>
@@ -1350,6 +1358,7 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
