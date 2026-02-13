@@ -326,7 +326,7 @@ def html_page(body: str) -> str:
 <style>
   body { font-family: -apple-system, system-ui, Arial; margin: 18px; max-width: 920px; }
   .card { border: 1px solid #ddd; border-radius: 14px; padding: 14px; margin: 12px 0; }
-  label { display:block; margin-top:10px; font-weight:600; }
+  label { display:block; margin-top:10px; font-weight:600; overflow-wrap:anywhere; }
   input, select, textarea, button { width: 100%; padding: 12px; margin-top: 6px; font-size: 16px; }
   .row { display:grid; grid-template-columns: 1fr 1fr; gap: 12px; }
   .muted { color:#666; }
@@ -1245,5 +1245,6 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
