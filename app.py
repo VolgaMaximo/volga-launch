@@ -354,10 +354,10 @@ h1 {
 
 h1 small {
   color: var(--volga-red);
-  font-weight: 700;
+  font-weight: 800;
 }
 
-  label { display:block; margin-top:10px; font-weight:600; overflow-wrap:anywhere; color: var(--volga-blue) }
+  label { display:block; margin-top:10px; font-weight:600; overflow-wrap:anywhere; color: var(--volga-red) }
   input, select, textarea { 
   width: 100%;
   max-width: 520px;
@@ -368,7 +368,7 @@ h1 small {
 
 button {
   background: var(--volga-red);
-  color: white;
+  color: var(--volga-bg);
   border: none;
   border-radius: 10px;
   padding: 14px 24px;
@@ -387,7 +387,7 @@ button:hover {
   .pill { display:inline-block; padding:6px 10px; border-radius:999px; border:1px solid #ddd; margin-right:8px; }
   .danger { color: var(--volga-red);
   font-weight:700; }
-  small { color: var(--volga-burgundy); }
+  small { color: var(--volga-blue); }
   a { color: var(--volga-blue);
   text-decoration:none; }
 .row > div {
@@ -404,13 +404,13 @@ button:hover {
 }
 
 .section-title{
-  color: var(--volga-burgundy);
+  color: var(--volga-blue);
   font-weight:700;
   margin-top:14px;
 }
 
 .notes{
-  color: var(--volga-burgundy);
+  color: var(--volga-red);
   margin-top:6px;
 }
 
@@ -1342,6 +1342,7 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
