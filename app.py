@@ -470,6 +470,10 @@ def form():
     office_opts = "".join([f"<option value='{o}' {'selected' if o==office else ''}>{o}</option>" for o in OFFICES])
 
     body = f"""
+    <div style="text-align:center; margin-bottom:25px;">
+  <img src="/logo.png" alt="VOLGA" style="max-height:90px;">
+</div>
+
 <h1>БИЗНЕС-ЛАНЧ ДЛЯ RingCentral<br>
 <small>BUSINESS LUNCH FOR RingCentral</small></h1>
 
@@ -1305,6 +1309,7 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
