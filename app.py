@@ -524,43 +524,7 @@ You can order:<br>
   </form>
 </div>
 
-<script>
-function compute(){
-  const z = document.getElementById('zakuska').value.trim();
-  const s = document.getElementById('soup').value.trim();
-  const h = document.getElementById('hot').value.trim();
-  const d = document.getElementById('dessert').value.trim();
 
-  const hasZ = !!z, hasS = !!s, hasH = !!h, hasD = !!d;
-  let option = null, price = null, err = null;
-
-  if(!hasS){ err = "Суп обязателен / Soup is required."; }
-
-  if(!err){
-    if(hasZ && hasS && hasD && !hasH){ option="Опция 1 / Option 1"; price=15; }
-    else if(!hasZ && hasS && hasH && hasD){ option="Опция 2 / Option 2"; price=16; }
-    else if(hasZ && hasS && hasH && !hasD){ option="Опция 3 / Option 3"; price=17; }
-    else { err = "Выберите суп и ещё 2 блюда / Choose soup + 2 more dishes."; }
-  }
-
-  if(!err && h.includes("Плов с бараниной")) price += 3;
-
-  document.getElementById('summary').innerHTML = err
-    ? "<span class='danger'>"+err+"</span>"
-    : "<span class='pill'>"+option+"</span><span class='pill'>Итого (ориентир) / Estimated: "+price+"€</span>";
-}
-document.addEventListener("change", compute);
-document.addEventListener("DOMContentLoaded", compute);
-
-function reloadWithParams(){
-  const office = document.getElementById('office').value;
-  const od = document.getElementById('order_date').value;
-  const url = new URL(window.location.href);
-  url.searchParams.set('office', office);
-  url.searchParams.set('date', od);
-  window.location.href = url.toString();
-}
-</script>
 """
     return html_page(body)
 
@@ -1296,3 +1260,4 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
