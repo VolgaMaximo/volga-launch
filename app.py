@@ -780,22 +780,7 @@ def edit_get():
           <p><a href="/">← На главную / Home</a></p>
         </div>
 
-        <script>
-          (function(){
-            function setVal(name, val){
-              const el = document.querySelector("select[name='"+name+"']");
-              if(!el) return;
-              for(const opt of el.options){
-                if(opt.text === val) { opt.selected = true; return; }
-              }
-            }
-            setVal("zakuska", {repr(found["zakuska"] or "")});
-            setVal("soup", {repr(found["soup"] or "")});
-            setVal("hot", {repr(found["hot"] or "")});
-            setVal("dessert", {repr(found["dessert"] or "")});
-            setVal("bread", {repr(found["bread"] or "")});
-          })();
-        </script>
+        
         """
         return html_page(body)
 
@@ -1260,4 +1245,5 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
