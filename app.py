@@ -351,7 +351,7 @@ h1 {
 
 h1 small {
   color: var(--volga-red);
-  font-weight: 600;
+  font-weight: 700;
 }
 
   label { display:block; margin-top:10px; font-weight:600; overflow-wrap:anywhere; }
@@ -470,8 +470,8 @@ def form():
     office_opts = "".join([f"<option value='{o}' {'selected' if o==office else ''}>{o}</option>" for o in OFFICES])
 
     body = f"""
-<h1>РЕСТОРАН VOLGA — БИЗНЕС-ЛАНЧ ДЛЯ RingCentral<br>
-<small class="muted">VOLGA RESTAURANT — BUSINESS LUNCH FOR RingCentral</small></h1>
+<h1>БИЗНЕС-ЛАНЧ ДЛЯ RingCentral<br>
+<small>BUSINESS LUNCH FOR RingCentral</small></h1>
 
 <p><b>Доставка в 13:00. Заказ до 11:00.</b><br>
 <small class="muted">Delivery at 13:00. Order before 11:00.</small></p>
@@ -1305,6 +1305,7 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
