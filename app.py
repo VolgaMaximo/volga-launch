@@ -324,6 +324,7 @@ def html_page(body: str) -> str:
 <meta name="theme-color" content="#ffffff">
 
 <style>
+* { box-sizing: border-box; }
   body { font-family: -apple-system, system-ui, Arial; margin: 18px; max-width: 920px; }
 .card { 
   border: 1px solid #ddd; 
@@ -345,7 +346,7 @@ button {
   padding: 12px 18px;
   font-size: 16px;
 }
-  .row { display:grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .row { display:grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 12px; }
   .muted { color:#666; }
   .pill { display:inline-block; padding:6px 10px; border-radius:999px; border:1px solid #ddd; margin-right:8px; }
   .danger { color:#b00; }
@@ -430,8 +431,8 @@ def form():
     office_opts = "".join([f"<option value='{o}' {'selected' if o==office else ''}>{o}</option>" for o in OFFICES])
 
     body = f"""
-<h1>РЕСТОРАН VOLGA — БИЗНЕС-ЛАНЧ ДЛЯ RINGCENTRAL<br>
-<small class="muted">VOLGA RESTAURANT — BUSINESS LUNCH FOR RINGCENTRAL</small></h1>
+<h1>РЕСТОРАН VOLGA — БИЗНЕС-ЛАНЧ ДЛЯ RingCentral<br>
+<small class="muted">VOLGA RESTAURANT — BUSINESS LUNCH FOR RingCentral</small></h1>
 
 <p><b>Доставка в 13:00. Заказ до 11:00.</b><br>
 <small class="muted">Delivery at 13:00. Order before 11:00.</small></p>
@@ -459,7 +460,7 @@ You can order:<br>
         </select>
       </div>
       <div>
-        <label>На какую дату привезти / Delivery date</label>
+        <label>На какую дату заказ / Delivery date</label>
         <input id="order_date" type="date" name="order_date" value="{d.isoformat()}" onchange="reloadWithParams()" required>
       </div>
     </div>
@@ -1265,6 +1266,7 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
