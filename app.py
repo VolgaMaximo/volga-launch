@@ -541,7 +541,7 @@ def form():
         </select>
       </div>
       <div>
-        <label>На какую дату заказ / Delivery date</label>
+        <label>Дата доставки / Delivery date</label>
         <input id="order_date" type="date" name="order_date" value="{d.isoformat()}" onchange="reloadWithParams()" required>
       </div>
     </div>
@@ -549,12 +549,12 @@ def form():
     <div class="row">
       <div>
         <label>Как вас зовут / Your name</label>
-        <input name="name" placeholder="Имя и фамилия / Name" required>
+        <input name="name" placeholder="" required>
       </div>
       <div>
-        <label>Телефон (для связи и поиска заказа) / Phone (for contact & order lookup)</label>
-        <input name="phone" placeholder="+34..." required>
-        <small class="muted">Формат любой — пробелы и дефисы не важны. / Any format — spaces and dashes don’t matter.</small>
+        <label>Телефон / Phone </label>
+        <input name="phone" placeholder="" required>
+        <small class="muted">для связи и поиска заказа / for contact & order lookup</small>
       </div>
     </div>
 
@@ -1347,6 +1347,7 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
