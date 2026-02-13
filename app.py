@@ -393,6 +393,30 @@ button:hover {
 .row > div {
   max-width: 520px;
 }
+.lead{
+  color: var(--volga-blue);
+  font-weight:700;
+}
+
+.lead .en{
+  color: var(--volga-red);
+  font-weight:500;
+}
+
+.section-title{
+  color: var(--volga-burgundy);
+  font-weight:700;
+  margin-top:14px;
+}
+
+.notes{
+  color: var(--volga-burgundy);
+  margin-top:6px;
+}
+
+.notes li{
+  margin: 4px 0;
+}
 
 input:focus, select:focus, textarea:focus {
   outline: none;
@@ -482,19 +506,23 @@ def form():
 <h1>БИЗНЕС-ЛАНЧ ДЛЯ RingCentral<br>
 <small>BUSINESS LUNCH FOR RingCentral</small></h1>
 
-<p><b>Доставка в 13:00. Заказ до 11:00.</b><br>
-<small class="muted">Delivery at 13:00. Order before 11:00.</small></p>
-
-<p class="muted">
-Заказывать можно:<br>
-• на сегодня — до 11:00<br>
-• на завтра — после 11:00<br><br>
-<small>
-You can order:<br>
-• for today — until 11:00<br>
-• for tomorrow — after 11:00
-</small>
+<p class="lead">
+  Доставка в 13:00. Заказ до 11:00.<br>
+  <span class="en">Delivery at 13:00. Order before 11:00.</span>
 </p>
+
+<p class="section-title">Заказывать можно:</p>
+<ul class="notes">
+  <li>на сегодня — до 11:00</li>
+  <li>на завтра — после 11:00</li>
+</ul>
+
+<p class="section-title">You can order:</p>
+<ul class="notes">
+  <li>for today — until 11:00</li>
+  <li>for tomorrow — after 11:00</li>
+</ul>
+
 
 {warn}
 
@@ -1314,6 +1342,7 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
