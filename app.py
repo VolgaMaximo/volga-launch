@@ -3,7 +3,7 @@ import re
 import sqlite3
 from datetime import datetime, date, time, timedelta
 from zoneinfo import ZoneInfo
-from flask import Flask, request, Response, redirect
+from flask import Flask, request, Response, redirect, send_file
 
 # ---------------------------
 # Config
@@ -281,7 +281,9 @@ def icon_svg():
 <text x="256" y="280" font-family="Arial, sans-serif" font-size="64" text-anchor="middle" fill="#111">VOLGA</text>
 </svg>"""
     return Response(svg, mimetype="image/svg+xml")
-
+@app.get("/logo.png")
+def logo_png():
+    return send_file("logo.png")
 
 @app.get("/sw.js")
 def sw_js():
@@ -1309,6 +1311,7 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
