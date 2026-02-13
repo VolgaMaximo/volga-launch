@@ -325,15 +325,35 @@ def html_page(body: str) -> str:
 
 <style>
   body { font-family: -apple-system, system-ui, Arial; margin: 18px; max-width: 920px; }
-  .card { border: 1px solid #ddd; border-radius: 14px; padding: 14px; margin: 12px 0; }
+.card { 
+  border: 1px solid #ddd; 
+  border-radius: 14px; 
+  padding: 20px; 
+  margin: 20px auto; 
+  max-width: 900px;
+}
   label { display:block; margin-top:10px; font-weight:600; overflow-wrap:anywhere; }
-  input, select, textarea, button { width: 100%; padding: 12px; margin-top: 6px; font-size: 16px; }
+  input, select, textarea { 
+  width: 100%;
+  max-width: 520px;
+  padding: 12px;
+  margin-top: 6px;
+  font-size: 16px;
+}
+
+button {
+  padding: 12px 18px;
+  font-size: 16px;
+}
   .row { display:grid; grid-template-columns: 1fr 1fr; gap: 12px; }
   .muted { color:#666; }
   .pill { display:inline-block; padding:6px 10px; border-radius:999px; border:1px solid #ddd; margin-right:8px; }
   .danger { color:#b00; }
   small { color:#666; }
   a { color:#06c; text-decoration:none; }
+.row > div {
+  max-width: 520px;
+}
 </style>
 </head>
 <body>
@@ -1245,6 +1265,7 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
