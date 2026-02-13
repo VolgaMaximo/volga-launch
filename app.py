@@ -341,7 +341,7 @@ def html_page(body: str) -> str:
 .card {
   background: transparent;
   border: 2px solid var(--volga-blue);
-  border-radius: 14px;
+  border-radius: 0;
   padding: 28px;
   margin: 30px auto;
   max-width: 900px;
@@ -368,14 +368,14 @@ h1 small {
   background: var(--volga-beige);
 color: var(--volga-blue);
 border: 2px solid var(--volga-blue);
-
+border-radius: 0;
 }
 
 button {
   background: var(--volga-red);
   color: var(--volga-bg);
   border: none;
-  border-radius: 10px;
+  border-radius: 0;
   padding: 14px 24px;
   font-size: 16px;
   font-weight: 600;
@@ -892,7 +892,7 @@ def edit_get():
       <form method="get" action="/edit">
         <div class="row">
           <div>
-            <label>Офис / Office</label>
+            <label>Офис / Office             </label>
             <select name="office" required>{office_opts}</select>
           </div>
           <div>
@@ -1347,6 +1347,7 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
