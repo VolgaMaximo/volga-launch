@@ -427,6 +427,9 @@ input:focus, select:focus, textarea:focus {
   outline: none;
   border: 2px solid var(--volga-blue);
 }
+@media (max-width: 700px){
+  .row { grid-template-columns: 1fr; }
+}
 
 </style>
 </head>
@@ -578,14 +581,14 @@ def form():
 
     <div class="row">
       <div>
-        <label>Закуска (по желанию) / Starter (optional)</label>
+        <label>Закуска / Starter </label>
         <select id="zakuska" name="zakuska">
           <option value="">— без закуски / no starter —</option>
           {options_html(MENU["zakuska"])}
         </select>
       </div>
       <div>
-        <label>Суп (обязательно) / Soup (required)</label>
+        <label>Суп / Soup </label>
         <select id="soup" name="soup" required>
           <option value="">— выбери суп / choose soup —</option>
           {options_html(MENU["soup"])}
@@ -600,7 +603,7 @@ def form():
           <option value="">— без горячего / no main —</option>
           {options_html(hot_items)}
         </select>
-        <small class="muted">Блюдо недели — в разделе «Горячее». / Weekly special is in “Main”.</small>
+        
       </div>
       <div>
         <label>Десерт (по желанию) / Dessert (optional)</label>
@@ -1347,6 +1350,7 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
