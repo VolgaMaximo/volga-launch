@@ -364,6 +364,11 @@ h1 small {
   padding: 12px;
   margin-top: 6px;
   font-size: 16px;
+
+  background: var(--volga-beige);
+color: var(--volga-blue);
+border: 2px solid var(--volga-blue);
+
 }
 
 button {
@@ -1342,6 +1347,7 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
