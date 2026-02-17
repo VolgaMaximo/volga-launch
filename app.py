@@ -544,6 +544,29 @@ button:hover{ background:var(--volga-blue); }
     display:block;
   }
 }
+/* ✅ Mobile fix: date input should not overflow and should not "merge" with card border */
+@media (max-width: 700px){
+
+  /* iOS/Safari часто делает date шире из-за системной кнопки/иконки */
+  input[type="date"]{
+    -webkit-appearance: none;
+    appearance: none;
+  }
+
+  /* конкретно наша дата */
+  #order_date{
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    display: block;
+
+    /* маленький "внутренний отступ" от рамки карточки,
+       чтобы визуально не сливалось */
+    margin-left: 2px;
+    margin-right: 2px;
+  }
+}
+
 </style>
 </head>
 <body>
@@ -1033,4 +1056,5 @@ def cancel_post():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
