@@ -131,9 +131,7 @@ def init_db():
         conn.execute("ALTER TABLE orders ADD COLUMN drink TEXT")
     if not _col_exists(conn, "orders", "drink_price_eur"):
         conn.execute("ALTER TABLE orders ADD COLUMN drink_price_eur REAL")
-
-Maxim Volga, [17/02/2026 20:19]
-# price_eur may already exist as INTEGER; keep it as-is (SQLite will store float anyway)
+    # price_eur may already exist as INTEGER; keep it as-is (SQLite will store float anyway)
 
     conn.execute("CREATE INDEX IF NOT EXISTS idx_orders_office_date ON orders(office, order_date)")
     conn.execute(
@@ -293,8 +291,7 @@ def compute_option_and_price(zakuska, soup, hot, dessert, office: str, d: date):
     if not has_s:
         return None, None, "Суп обязателен / Soup is required."
 
-Maxim Volga, [17/02/2026 20:19]
-if has_z and has_s and has_d and not has_h:
+    if has_z and has_s and has_d and not has_h:
         option = "opt1"
         price = float(PRICES[option])
     elif (not has_z) and has_s and has_h and has_d:
@@ -431,9 +428,7 @@ def html_page(body: str) -> str:
 <style>
 :root{
   --volga-blue:#0E238E;
-
-Maxim Volga, [17/02/2026 20:19]
---volga-red:#E73F24;
+  --volga-red:#E73F24;
   --volga-burgundy:#8E2C1F;
   --volga-bg:#EDE7D3;
 }
@@ -620,32 +615,6 @@ button:hover{ background: var(--volga-blue); }
   margin-top: 22px; /* больше воздуха после комментария */
 }
 
-/* secondary button (Edit/cancel) */
-.btn-secondary{
-  display:block;
-  margin-top:18px;
-  text-align:center;
-  padding:14px 24px;
-  border:2px solid var(--volga-blue);
-  background: var(--volga-blue);
-  color: var(--volga-bg);
-  font-size:16px;
-  font-weight:800;
-  text-decoration:none;
-  border-radius:0;
-  max-width:520px;
-}
-.btn-secondary:hover{
-  background: var(--volga-blue);
-  color: var(--volga-bg);
-}
-.btn-secondary:active{
-  background: var(--volga-red);
-  border-color: var(--volga-red);
-  color: var(--volga-bg);
-}
-
-
 @media (max-width: 700px){
   .card{ padding: 18px; }
   .row{ grid-template-columns: 1fr; }
@@ -654,7 +623,7 @@ button:hover{ background: var(--volga-blue); }
 </style>
 </head>
 <body>
-BODY
+__BODY__
 
 <script>
 (function(){
@@ -662,9 +631,7 @@ BODY
   document.querySelectorAll('form').forEach((f) => {
     f.addEventListener('submit', () => {
       const btns = f.querySelectorAll('button[type="submit"]');
-
-Maxim Volga, [17/02/2026 20:19]
-btns.forEach(b => { b.disabled = true; b.dataset._txt = b.textContent; b.textContent = 'Отправка… / Sending…'; });
+      btns.forEach(b => { b.disabled = true; b.dataset._txt = b.textContent; b.textContent = 'Отправка… / Sending…'; });
     });
   });
 
@@ -800,9 +767,7 @@ def form():
         <label>Горячее / Main</label>
         <select id="hot" name="hot">
           <option value="">— без горячего / no main —</option>
-
-Maxim Volga, [17/02/2026 20:19]
-{options_html_ru_en(hot_items)}
+          {options_html_ru_en(hot_items)}
         </select>
       </div>
       <div>
@@ -904,8 +869,7 @@ def order():
     try:
         conn.execute("BEGIN IMMEDIATE")
 
-Maxim Volga, [17/02/2026 20:19]
-cnt = conn.execute(
+        cnt = conn.execute(
             "SELECT COUNT(*) as c FROM orders WHERE office=? AND order_date=? AND status='active'",
             (office, d.isoformat()),
         ).fetchone()["c"]
@@ -994,9 +958,7 @@ cnt = conn.execute(
         <p class="muted">Комментарий / Notes: {comment or "—"}</p>
         <p><a class="btn-secondary" href="/edit?office={office}&date={d.isoformat()}&phone={phone_raw}">Изменить / отменить / Edit / cancel</a></p>
       </div>
-
-Maxim Volga, [17/02/2026 20:19]
-<p><a href="/">Новый заказ / New order</a></p>
+      <p><a href="/">Новый заказ / New order</a></p>
     """
     )
 
@@ -1104,9 +1066,7 @@ def edit_get():
             </select>
 
             <label>Хлеб (бесплатно) / Bread (free)</label>
-
-Maxim Volga, [17/02/2026 20:19]
-<select name="bread" id="bread">
+            <select name="bread" id="bread">
               <option value="">— без хлеба / no bread —</option>
               {options_html_ru_en(BREAD_OPTIONS)}
             </select>
@@ -1206,9 +1166,7 @@ def edit_post():
     phone_raw = (request.form.get("phone", "") or "").strip()
     phone_norm = normalize_phone(phone_raw)
     if not phone_norm:
-
-Maxim Volga, [17/02/2026 20:19]
-return html_page("<p class='danger'>Ошибка: телефон обязателен / Phone is required.</p><p><a href='/edit'>Назад / Back</a></p>"), 400
+        return html_page("<p class='danger'>Ошибка: телефон обязателен / Phone is required.</p><p><a href='/edit'>Назад / Back</a></p>"), 400
 
     name = (request.form.get("name", "") or "").strip()
     zakuska = (request.form.get("zakuska", "") or "").strip() or None
@@ -1298,10 +1256,7 @@ def cancel_post():
             return html_page("<p class='danger'><b>В понедельник мы не работаем.</b><br><small>We are closed on Mondays.</small></p><p><a href='/edit'>Назад / Back</a></p>"), 403
         return html_page(
             f"<p class='danger'><b>Окно отмены закрыто.</b><br>"
-            f"<small>Окно: {start.
-
-Maxim Volga, [17/02/2026 20:19]
-strftime('%d.%m %H:%M')} — {end.strftime('%d.%m %H:%M')}. Сейчас: {now_.strftime('%d.%m %H:%M')}.</small></p>"
+            f"<small>Окно: {start.strftime('%d.%m %H:%M')} — {end.strftime('%d.%m %H:%M')}. Сейчас: {now_.strftime('%d.%m %H:%M')}.</small></p>"
             f"<p><a href='/edit'>Назад / Back</a></p>"
         ), 403
 
@@ -1416,8 +1371,7 @@ def admin():
     body = f"""
     <h1>Админка</h1>
 
-Maxim Volga, [17/02/2026 20:19]
-<div class="card">
+    <div class="card">
       <form method="get" action="/admin">
         <input type="hidden" name="token" value="{ADMIN_TOKEN}">
         <div class="row">
@@ -1543,8 +1497,7 @@ def admin_special_post():
     except ValueError:
         return html_page("<p class='danger'>Ошибка: неверные даты.</p>"), 400
 
-Maxim Volga, [17/02/2026 20:19]
-if end_date < start_date:
+    if end_date < start_date:
         return html_page("<p class='danger'>Ошибка: end_date раньше start_date.</p>"), 400
 
     title = (request.form.get("title", "") or "").strip()
@@ -1637,10 +1590,6 @@ def export_csv():
     )
 
 
-if name == "__main__":
+if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
-
-
-
-
 
