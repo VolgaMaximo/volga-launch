@@ -416,12 +416,16 @@ h1{
   letter-spacing:1px;
   margin:0 0 14px 0;
   line-height:1.0;
+  text-align:center;
+
 
 }
 h1 small{
   color:var(--volga-red);
   font-weight:800;
-  line-height:1.0;
+  line-height:0.95;
+  text-align:center;
+
 }
 
 label{
@@ -1083,6 +1087,7 @@ def cancel_post():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
