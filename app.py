@@ -540,6 +540,34 @@ a:hover{ color:var(--volga-red); }
   color:var(--volga-red);
 }
 
+/* secondary button (link) */
+.btn-secondary{
+  display:block;
+  margin-top:18px;
+  text-align:center;
+  padding:14px 24px;
+  border:2px solid var(--volga-blue);
+  color:var(--volga-blue);
+  background: transparent;
+  font-size:16px;
+  font-weight:700;
+  text-decoration:none;
+  border-radius:0;
+}
+
+.btn-secondary:hover{
+  background: var(--volga-blue);
+  color: var(--volga-bg);
+}
+
+/* нажатие (тап на мобиле / клик) — красный */
+.btn-secondary:active{
+  background: var(--volga-red);
+  border-color: var(--volga-red);
+  color: var(--volga-bg);
+}
+
+
 @media (max-width: 700px){
   .card{ padding:18px; }
   .row{ grid-template-columns:1fr; }
@@ -550,6 +578,30 @@ a:hover{ color:var(--volga-red); }
   }
   h1{ letter-spacing:0.5px; }
 } /* <-- важно: закрыли @media */
+
+/* --- Mobile fix: date field not merging with card border --- */
+input[type="date"]{
+  width:100%;
+  max-width:520px;
+  min-width:0;
+}
+
+@media (max-width: 700px){
+  /* небольшой “воздух” внутри карточки, чтобы рамки не сливались */
+  .card { padding: 20px; }
+
+  /* чуть увеличим зазор между блоками внутри .row */
+  .row { gap: 16px; }
+
+  /* дата иногда рисуется шире — фиксируем */
+  #order_date{
+    width:100%;
+    max-width:100%;
+    display:block;
+  }
+}
+
+
 </style>
 </head>
 <body>
@@ -745,6 +797,7 @@ def form():
 
     <div style="margin-top:18px;">
       <a class="btn-secondary" href="/edit">Изменить / отменить заказ / Edit / cancel</a>
+
     </div>
   </form>
 </div>
@@ -1540,3 +1593,4 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
