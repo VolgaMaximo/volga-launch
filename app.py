@@ -494,32 +494,52 @@ a:hover{ color:var(--volga-red); }
 .hours .en{ color:var(--volga-red); }
 
 /* кнопки */
-button{
+/* --- Основная кнопка (Confirm) --- */
+.btn-confirm{
+  display:block;
+  width:100%;
+  max-width:520px;
+  padding:16px 24px;
+  font-size:16px;
+  font-weight:800;
+
+  background:var(--volga-blue);
+  color:var(--volga-bg);
+  border:none;
+  border-radius:0;
+  cursor:pointer;
+  transition:0.2s ease;
+}
+
+/* при нажатии — красная */
+.btn-confirm:active{
+  background:var(--volga-red);
+}
+
+
+/* --- Вторая кнопка (Edit / Cancel) --- */
+.btn-edit{
+  display:block;
+  width:100%;
+  max-width:520px;
+  padding:16px 24px;
+  font-size:16px;
+  font-weight:800;
+
   background:var(--volga-red);
   color:var(--volga-bg);
   border:none;
   border-radius:0;
-  padding:14px 24px;
-  font-size:16px;
-  font-weight:800;
   cursor:pointer;
   transition:0.2s ease;
-}
-button:hover{ background:var(--volga-blue); }
-
-.btn-secondary{
-  display:block;
   margin-top:18px;
-  text-align:center;
-  padding:14px 24px;
-  border:2px solid var(--volga-blue);
-  color:var(--volga-blue);
-  background: transparent;
-  font-size:16px;
-  font-weight:900;
-  text-decoration:none;
-  border-radius:0;
 }
+
+/* при нажатии — синяя */
+.btn-edit:active{
+  background:var(--volga-blue);
+}
+
 .btn-secondary:hover{
   background: var(--volga-blue);
   color: var(--volga-bg);
@@ -738,11 +758,15 @@ def form():
     <label>Комментарий (если есть аллергии или пожелания) / Notes (allergies/requests)</label>
     <textarea name="comment" rows="3" placeholder="Без лука / No onion, аллергия / allergy..."></textarea>
 
-    <button type="submit" style="margin-top:30px;" {"disabled" if (not ok_time or limit_reached) else ""}>
-      Подтвердить заказ / Confirm order
-    </button>
+ <button type="submit" class="btn-confirm" style="margin-top:22px;">
+  Подтвердить заказ / Confirm order
+</button>
 
-    <a class="btn-secondary" href="/edit">Изменить / отменить заказ / Edit / cancel</a>
+
+    <a href="/edit" class="btn-edit">
+  Изменить / отменить заказ / Edit / cancel
+</a>
+
   </form>
 </div>
 """
@@ -1056,5 +1080,6 @@ def cancel_post():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
