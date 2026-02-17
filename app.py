@@ -555,17 +555,7 @@ a:hover{ color:var(--volga-red); }
   border-radius:0;
 }
 
-.btn-secondary:hover{
-  background: var(--volga-blue);
-  color: var(--volga-bg);
-}
 
-/* нажатие (тап на мобиле / клик) — красный */
-.btn-secondary:active{
-  background: var(--volga-red);
-  border-color: var(--volga-red);
-  color: var(--volga-bg);
-}
 
 
 @media (max-width: 700px){
@@ -599,9 +589,9 @@ input[type="date"]{
     max-width:100%;
     display:block;
   }
+
+
 }
-
-
 </style>
 </head>
 <body>
@@ -1593,4 +1583,5 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
