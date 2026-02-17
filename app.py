@@ -413,10 +413,10 @@ body{
 h1{
   color:var(--volga-blue);
   font-weight:800;
-  letter-spacing:1px;
+    letter-spacing:1px;
   margin:0 0 14px 0;
-  line-height:0.95;
-  
+    font-size:1em;
+  line-height:1.0;
 
 
 }
@@ -426,6 +426,11 @@ h1 small{
   font-weight:800;
   line-height:1.00;
   margin-top:4px;
+  font-size:1em;
+  
+}
+
+  
 }
 
 
@@ -1089,6 +1094,7 @@ def cancel_post():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
