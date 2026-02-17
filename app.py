@@ -415,7 +415,7 @@ h1{
   font-weight:800;
   letter-spacing:1px;
   margin:0 0 14px 0;
-  line-height:1.0;
+  line-height:0.95;
   
 
 
@@ -671,9 +671,10 @@ def form():
     drink_options = "".join([f"<option value='{k}'>{lbl}</option>" for (k, lbl, _) in DRINKS])
 
     body = f"""
-<div style="text-align:center; margin-bottom:18px;">
-  <img src="/logo.png" alt="VOLGA" style="max-height:90px;">
+<div style="margin-bottom:18px;">
+  <img src="/logo.png" alt="VOLGA" style="max-height:90px; display:block;">
 </div>
+
 
 <h1>БИЗНЕС-ЛАНЧ ДЛЯ RingCentral<br>
 <small>BUSINESS LUNCH FOR RingCentral</small></h1>
@@ -1088,6 +1089,7 @@ def cancel_post():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
