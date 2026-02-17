@@ -19,59 +19,52 @@ ORDER_PREFIX = os.getenv("ORDER_PREFIX", "VO")
 
 OFFICES = ["ALAMEDA", "MUSICA"]
 
-# ---------------------------
-# Menu (RU + EN)
-# В БД мы сохраняем RU-значение, а пользователю показываем "RU / EN"
-# ---------------------------
+# --- Меню: RU / EN ---
 MENU = {
     "zakuska": [
-        ("Оливье", "Olivier salad"),
-        ("Винегрет", "Vinaigrette"),
-        ("Икра из баклажанов", "Eggplant caviar"),
-        ("Паштет из куриной печени", "Chicken liver pâté"),
-        ("Шуба", "Herring under a fur coat"),
+        "Оливье / Olivier salad",
+        "Винегрет / Vinaigrette beet salad",
+        "Икра из баклажанов / Eggplant caviar",
+        "Паштет из куриной печени / Chicken liver pâté",
+        "Шуба / Herring under a fur coat",
     ],
     "soup": [
-        ("Борщ", "Borscht"),
-        ("Солянка сборная мясная", "Meat solyanka"),
-        ("Куриный с домашней лапшой и яйцом", "Chicken soup with noodles & egg"),
+        "Борщ / Borscht",
+        "Солянка сборная мясная / Meat solyanka",
+        "Куриный с домашней лапшой и яйцом / Chicken soup with noodles & egg",
     ],
     "hot": [
-        ("Куриные котлеты с пюре", "Chicken cutlets with mashed potatoes"),
-        ("Куриные котлеты с гречкой", "Chicken cutlets with buckwheat"),
-        ("Вареники с картошкой", "Potato vareniki"),
-        ("Пельмени со сметаной", "Pelmeni with sour cream"),
-        ("Плов с бараниной (+3€)", "Lamb plov (+3€)"),
+        "Куриные котлеты с пюре / Chicken cutlets with mash",
+        "Куриные котлеты с гречкой / Chicken cutlets with buckwheat",
+        "Вареники с картошкой / Potato vareniki",
+        "Пельмени со сметаной / Pelmeni with sour cream",
+        "Плов с бараниной (+3€) / Lamb plov (+3€)",
     ],
     "dessert": [
-        ("Торт Наполеон", "Napoleon cake"),
-        ("Пирожное Картошка", "Kartoshka cake"),
-        ("Трубочка со сгущенкой", "Puff pastry with condensed milk"),
+        "Торт Наполеон / Napoleon cake",
+        "Пирожное Картошка / Chocolate “Kartoshka” cake",
+        "Трубочка со сгущенкой / Puff pastry roll with condensed milk",
     ],
 }
 
-# ---------------------------
-# Drinks (extra, not included)
-# prices provided by you:
-# mors 4, water 2.2, tea 3.5, kvass 3.5
-# ---------------------------
+PRICES = {"opt1": 15.0, "opt2": 16.0, "opt3": 17.0}
+PLOV_SURCHARGE = 3.0
+
+BREAD_OPTIONS = ["Белый / White", "Чёрный / Black"]
+
+# --- Напитки (дополнительно) ---
+# value -> (label, price)
 DRINKS = [
-    ("Квас", "Kvass", 3.5),
-    ("Морс", "Berry drink (mors)", 4.0),
-    ("Вода", "Water", 2.2),
-    ("Чай черный с чабрецом (сашет)", "Black tea with thyme (sachet)", 3.5),
-    ("Чай зеленый (сашет)", "Green tea (sachet)", 3.5),
-    ("Чай травяной (сашет)", "Herbal tea (sachet)", 3.5),
+    ("", "— без напитка / no drink —", 0.0),
+    ("kvass", "Квас / Kvass", 3.5),
+    ("mors", "Морс / Berry drink (Mors)", 4.0),
+    ("water", "Вода / Water", 2.2),
+    ("tea_black", "Чай чёрный с чабрецом (сашет) / Black tea with thyme (sachet)", 3.5),
+    ("tea_green", "Чай зелёный (сашет) / Green tea (sachet)", 3.5),
+    ("tea_herbal", "Чай травяной (сашет) / Herbal tea (sachet)", 3.5),
 ]
-
-PRICES = {"opt1": 15, "opt2": 16, "opt3": 17}
-PLOV_SURCHARGE = 3
-
-BREAD_OPTIONS = [("Белый", "White"), ("Чёрный", "Black")]
-
-# Files in repo root (same folder as app.py)
-LOGO_FILE = os.getenv("LOGO_FILE", "logo.png")
-BANNER_FILE = os.getenv("BANNER_FILE", "banner.png")
+DRINK_PRICE = {k: p for (k, _, p) in DRINKS}
+DRINK_LABEL = {k: lbl for (k, lbl, _) in DRINKS}
 
 app = Flask(__name__)
 
@@ -85,15 +78,20 @@ def db():
     return conn
 
 
-def _col_exists(conn: sqlite3.Connection, table: str, col: str) -> bool:
-    rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
-    return any(r["name"] == col for r in rows)
+def ensure_columns(conn: sqlite3.Connection):
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(orders)").fetchall()}
+    # migrations (safe)
+    if "drink_code" not in cols:
+        conn.execute("ALTER TABLE orders ADD COLUMN drink_code TEXT")
+    if "drink_label" not in cols:
+        conn.execute("ALTER TABLE orders ADD COLUMN drink_label TEXT")
+    if "drink_price_eur" not in cols:
+        conn.execute("ALTER TABLE orders ADD COLUMN drink_price_eur REAL")
+    # price_eur already exists; it will now store TOTAL including drink
 
 
 def init_db():
     conn = db()
-
-    # Base table (new installs)
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS orders (
@@ -111,9 +109,6 @@ def init_db():
             hot TEXT,
             dessert TEXT,
 
-            drink TEXT,
-            drink_price_eur REAL,
-
             bread TEXT,
 
             option_code TEXT NOT NULL,
@@ -124,15 +119,6 @@ def init_db():
         )
         """
     )
-
-    # Migrations for old DBs
-    # (SQLite allows storing REAL even if column declared INTEGER earlier)
-    if not _col_exists(conn, "orders", "drink"):
-        conn.execute("ALTER TABLE orders ADD COLUMN drink TEXT")
-    if not _col_exists(conn, "orders", "drink_price_eur"):
-        conn.execute("ALTER TABLE orders ADD COLUMN drink_price_eur REAL")
-    # price_eur may already exist as INTEGER; keep it as-is (SQLite will store float anyway)
-
     conn.execute("CREATE INDEX IF NOT EXISTS idx_orders_office_date ON orders(office, order_date)")
     conn.execute(
         """
@@ -156,6 +142,7 @@ def init_db():
     )
     conn.execute("CREATE INDEX IF NOT EXISTS idx_special_office_dates ON weekly_special(office, start_date, end_date)")
 
+    ensure_columns(conn)
     conn.commit()
     conn.close()
 
@@ -190,7 +177,6 @@ def validate_order_time(d: date):
     n = now_local()
     start, end = ordering_window_for(d)
 
-    # closed on Mondays
     if is_closed_day(d):
         return False, start, end, n
 
@@ -211,7 +197,6 @@ def normalize_phone(raw: str) -> str:
 def compute_default_date():
     n = now_local()
     today = n.date()
-    # default: today if before 11:00 else tomorrow
     d = today if n < cutoff_dt(today) else (today + timedelta(days=1))
     return d
 
@@ -220,31 +205,14 @@ def check_admin():
     return request.args.get("token", "") == ADMIN_TOKEN
 
 
-def label_ru_en(ru: str, en: str) -> str:
-    return f"{ru} / {en}"
-
-
-def options_html_ru_en(items):
-    """
-    items: list[tuple(ru, en)] or list[tuple(ru,en,price)]
-    value stored = ru (or ru key)
-    """
-    out = []
-    for it in items:
-        if len(it) == 2:
-            ru, en = it
-            txt = label_ru_en(ru, en)
-        else:
-            ru, en, price = it
-            # show price as +X€
-            p = f"{price:.1f}".rstrip("0").rstrip(".")
-            txt = f"{label_ru_en(ru, en)} (+{p}€)"
-        out.append(f"<option value='{ru}'>{txt}</option>")
-    return "".join(out)
-
-
-def options_html_text(items):
+def options_html(items):
+    # items: list[str]
     return "".join([f"<option>{x}</option>" for x in items])
+
+
+def options_html_values(items):
+    # items: list[tuple(value, label)]
+    return "".join([f"<option value='{v}'>{lbl}</option>" for (v, lbl) in items])
 
 
 def get_weekly_special(office: str, d: date):
@@ -266,23 +234,15 @@ def hot_menu_with_special(office: str, d: date):
     items = MENU["hot"].copy()
     special = get_weekly_special(office, d)
     if special:
-        label = f"Блюдо недели: {special['title']}"
+        label = f"Блюдо недели: {special['title']} / Weekly special: {special['title']}"
         s = int(special["surcharge_eur"])
         if s > 0:
             label += f" (+{s}€)"
-        # We keep EN same as RU for now (you can change later in admin if needed)
-        items.insert(0, (label, f"Weekly special: {special['title']}" + (f" (+{s}€)" if s > 0 else "")))
+        items.insert(0, label)
     return items
 
 
-def drink_price_by_ru(ru: str):
-    for r, e, p in DRINKS:
-        if r == ru:
-            return float(p)
-    return 0.0
-
-
-def compute_option_and_price(zakuska, soup, hot, dessert, office: str, d: date):
+def compute_option_base_price(zakuska, soup, hot, dessert, office: str, d: date):
     has_z = bool(zakuska)
     has_s = bool(soup)
     has_h = bool(hot)
@@ -293,25 +253,35 @@ def compute_option_and_price(zakuska, soup, hot, dessert, office: str, d: date):
 
     if has_z and has_s and has_d and not has_h:
         option = "opt1"
-        price = float(PRICES[option])
+        price = PRICES[option]
     elif (not has_z) and has_s and has_h and has_d:
         option = "opt2"
-        price = float(PRICES[option])
+        price = PRICES[option]
     elif has_z and has_s and has_h and (not has_d):
         option = "opt3"
-        price = float(PRICES[option])
+        price = PRICES[option]
     else:
         return None, None, "Нужно выбрать ровно 3 категории по правилам опций / Please select exactly 3 categories per options."
 
+    # plov surcharge
     if hot and "Плов с бараниной" in hot:
-        price += float(PLOV_SURCHARGE)
+        price += PLOV_SURCHARGE
 
+    # weekly special surcharge
     if hot and hot.startswith("Блюдо недели:"):
         special = get_weekly_special(office, d)
         if special:
             price += float(int(special["surcharge_eur"]))
 
-    return option, price, None
+    return option, float(price), None
+
+
+def compute_total_price(base_price: float, drink_code: str) -> float:
+    drink_code = (drink_code or "").strip()
+    add = float(DRINK_PRICE.get(drink_code, 0.0))
+    total = float(base_price) + add
+    # round to 2 decimals for display/storage
+    return round(total, 2)
 
 
 def generate_order_code(conn: sqlite3.Connection, office: str, d: date) -> str:
@@ -339,25 +309,23 @@ def generate_order_code(conn: sqlite3.Connection, office: str, d: date) -> str:
     return f"{ORDER_PREFIX}-{ymd}-{seq:03d}"
 
 
-def eur(x: float) -> str:
-    # Pretty: 2.2 -> "2.2€", 4.0 -> "4€"
-    s = f"{float(x):.2f}".rstrip("0").rstrip(".")
-    return f"{s}€"
+def file_path(name: str) -> str:
+    return os.path.join(os.path.dirname(__file__), name)
 
 
 # ---------------------------
-# PWA minimal (kept)
+# PWA minimal
 # ---------------------------
 @app.get("/manifest.webmanifest")
 def manifest():
     import json
     data = {
-        "name": "VOLGA Lunch",
+        "name": APP_TITLE,
         "short_name": "VOLGA Lunch",
         "start_url": "/",
         "display": "standalone",
-        "background_color": "#ffffff",
-        "theme_color": "#ffffff",
+        "background_color": "#EDE7D3",
+        "theme_color": "#EDE7D3",
         "icons": [{"src": "/icon.svg", "sizes": "any", "type": "image/svg+xml"}],
     }
     return Response(json.dumps(data, ensure_ascii=False), mimetype="application/manifest+json")
@@ -366,29 +334,29 @@ def manifest():
 @app.get("/icon.svg")
 def icon_svg():
     svg = """<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
-<rect width="512" height="512" fill="#ffffff"/>
-<rect x="64" y="64" width="384" height="384" fill="#f2f2f2" stroke="#111" stroke-width="12"/>
-<path d="M110 170 L402 110 L402 180 L110 240 Z" fill="#d00" opacity="0.9"/>
-<path d="M110 330 L402 270 L402 340 L110 400 Z" fill="#06c" opacity="0.9"/>
-<text x="256" y="280" font-family="Arial, sans-serif" font-size="64" text-anchor="middle" fill="#111">VOLGA</text>
+<rect width="512" height="512" fill="#EDE7D3"/>
+<rect x="64" y="64" width="384" height="384" fill="#EDE7D3" stroke="#0E238E" stroke-width="14"/>
+<path d="M110 170 L402 110 L402 180 L110 240 Z" fill="#E73F24" opacity="0.95"/>
+<path d="M110 330 L402 270 L402 340 L110 400 Z" fill="#0E238E" opacity="0.95"/>
+<text x="256" y="290" font-family="Arial, sans-serif" font-size="64" text-anchor="middle" fill="#0E238E">VOLGA</text>
 </svg>"""
     return Response(svg, mimetype="image/svg+xml")
 
 
 @app.get("/logo.png")
 def logo_png():
-    return send_file(LOGO_FILE)
+    return send_file(file_path("logo.png"))
 
 
 @app.get("/banner.png")
 def banner_png():
-    return send_file(BANNER_FILE)
+    return send_file(file_path("banner.png"))
 
 
 @app.get("/sw.js")
 def sw_js():
     js = """
-const CACHE = 'volga-lunch-v1';
+const CACHE = 'volga-lunch-v2';
 const ASSETS = ['/', '/edit', '/manifest.webmanifest', '/icon.svg', '/logo.png', '/banner.png'];
 
 self.addEventListener('install', (e) => {
@@ -423,7 +391,7 @@ def html_page(body: str) -> str:
 <title>VOLGA Lunch</title>
 
 <link rel="manifest" href="/manifest.webmanifest">
-<meta name="theme-color" content="#ffffff">
+<meta name="theme-color" content="#EDE7D3">
 
 <style>
 :root{
@@ -433,193 +401,155 @@ def html_page(body: str) -> str:
   --volga-bg:#EDE7D3;
 }
 
-* { box-sizing: border-box; }
-body {
-  font-family: -apple-system, system-ui, Arial;
-  margin: 18px;
-  background: var(--volga-bg);
-  color: var(--volga-blue);
+*{ box-sizing:border-box; }
+
+body{
+  font-family:-apple-system, system-ui, Arial;
+  margin:18px;
+  background:var(--volga-bg);
+  color:var(--volga-blue);
 }
 
-.card {
-  background: transparent;
-  border: 2px solid var(--volga-blue);
-  border-radius: 0;
-  padding: 28px;
-  margin: 30px auto;
-  max-width: 900px;
-  overflow: hidden; /* чтобы ничего не вылезало за рамку на мобиле */
+.card{
+  background:transparent;
+  border:2px solid var(--volga-blue);
+  border-radius:0;
+  padding:28px;
+  margin:30px auto;
+  max-width:900px;
+  overflow:hidden; /* фикс “вылезает за границы” */
 }
 
-h1 {
-  color: var(--volga-blue);
-  font-weight: 800;
-  letter-spacing: 1px;
+h1{
+  color:var(--volga-blue);
+  font-weight:800;
+  letter-spacing:1px;
+  margin:0 0 14px 0;
+}
+h1 small{
+  color:var(--volga-red);
+  font-weight:800;
 }
 
-h1 small {
-  color: var(--volga-red);
-  font-weight: 800;
-}
-
-label {
+label{
   display:block;
-  margin-top:14px;
+  margin-top:10px;
   font-weight:700;
   overflow-wrap:anywhere;
-  color: var(--volga-red); /* ЛЕЙБЛЫ КРАСНЫЕ */
+  color:var(--volga-blue);
 }
 
 input, select, textarea{
-  display:block;
-  width: 100%;
-  max-width: 100%;
-  min-width: 0;
-  padding: 12px;
-  margin-top: 8px;
-  font-size: 16px;
+  width:100%;
+  max-width:520px;
+  padding:12px;
+  margin-top:6px;
+  font-size:16px;
 
-  background: var(--volga-bg);
-  color: var(--volga-blue);
-  border: 2px solid var(--volga-blue);
-  border-radius: 0;
+  background:var(--volga-bg);
+  color:var(--volga-blue);
+  border:2px solid var(--volga-blue);
+  border-radius:0;
 }
 
-select, textarea{
-  background: var(--volga-bg);
-  color: var(--volga-blue);
-}
-
-/* Fix for mobile date input trying to be wider */
 input[type="date"]{
-  width: 100%;
-  max-width: 100%;
-  min-width: 0;
+  max-width:100%;
+}
+
+input:focus, select:focus, textarea:focus{
+  outline:none;
+  border:2px solid var(--volga-blue);
+}
+
+button{
+  background:var(--volga-red);
+  color:var(--volga-bg);
+  border:none;
+  border-radius:0;
+  padding:14px 24px;
+  font-size:16px;
+  font-weight:700;
+  cursor:pointer;
+  transition:0.2s ease;
+}
+
+button:hover{
+  background:var(--volga-blue);
 }
 
 .row{
   display:grid;
-  grid-template-columns: minmax(0,1fr) minmax(0,1fr);
-  gap: 14px;
-  align-items: start;
-}
-.row > div{
-  min-width: 0;
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+  gap:12px;
 }
 
-.lead{
-  color: var(--volga-blue);
-  font-weight:700;
-  margin: 0 0 8px 0;
-}
-.lead .en{
-  color: var(--volga-red);
-  font-weight:600;
-}
+.row > div{ max-width:520px; }
 
-.hours{
-  margin: 18px 0 10px 0;
-  line-height: 1.35;
-}
-.hours .ru{
-  color: var(--volga-blue);
-  font-weight:800;
-}
-.hours .en{
-  color: var(--volga-red);
-  font-weight:800;
-}
+.muted{ color:var(--volga-burgundy); }
+.danger{ color:var(--volga-red); font-weight:800; }
 
-.notes{
-  color: var(--volga-burgundy);
-  margin-top: 8px;
-  line-height: 1.35;
-}
-.notes li{
-  margin: 6px 0;
-}
+small{ color:var(--volga-burgundy); }
 
-.muted{ color: var(--volga-burgundy); }
-small{ color: var(--volga-burgundy); }
+a{ color:var(--volga-blue); text-decoration:none; font-weight:700; }
+a:hover{ color:var(--volga-red); }
 
 .pill{
   display:inline-block;
   padding:6px 10px;
   border-radius:999px;
-  border:2px solid var(--volga-blue);
+  border:1px solid var(--volga-blue);
   margin-right:8px;
+  color:var(--volga-blue);
 }
 
-.danger{
-  color: var(--volga-red);
+.lead{
+  color:var(--volga-blue);
+  font-weight:800;
+  margin:12px 0 0 0;
+}
+.lead .en{
+  color:var(--volga-red);
   font-weight:800;
 }
 
-a{
-  color: var(--volga-blue);
-  text-decoration:none;
+.section-title{
+  color:var(--volga-burgundy);
+  font-weight:800;
+  margin-top:18px;
+  margin-bottom:6px;
 }
-a:hover{ color: var(--volga-red); }
 
-button{
-  background: var(--volga-red);
-  color: var(--volga-bg);
-  border: none;
-  border-radius: 0;
-  padding: 16px 24px;
-  font-size: 16px;
-  font-weight: 800;
-  cursor: pointer;
-  transition: 0.2s ease;
-  width: 100%;
-  max-width: 520px;
+.notes{
+  color:var(--volga-burgundy);
+  margin-top:6px;
+  margin-bottom:0;
 }
-button:hover{ background: var(--volga-blue); }
+.notes li{ margin:6px 0; }
 
 .btn-secondary{
-  display:block;
-  width: 100%;
-  max-width: 520px;
-  padding: 16px 24px;
-  border-radius: 0;
-  border: 2px solid var(--volga-blue);
-  background: var(--volga-blue);
-  color: var(--volga-bg);
-  font-weight: 800;
-  text-align:center;
-  margin-top: 16px;
-  transition: 0.2s ease;
+  display:inline-block;
+  padding:14px 24px;
+  border:2px solid var(--volga-blue);
+  background:transparent;
+  color:var(--volga-blue);
+  text-decoration:none;
+  font-weight:800;
 }
 .btn-secondary:hover{
-  border-color: var(--volga-red);
-  background: var(--volga-red);
-  color: var(--volga-bg);
-}
-.btn-secondary:active{
-  border-color: var(--volga-red);
-  background: var(--volga-red);
-}
-
-.banner-wrap{
-  margin: 18px 0 18px 0;
-  border: 2px solid var(--volga-blue);
-  padding: 10px;
-}
-.banner-wrap img{
-  display:block;
-  width:100%;
-  height:auto;
-}
-
-.actions{
-  margin-top: 22px; /* больше воздуха после комментария */
+  border-color:var(--volga-red);
+  color:var(--volga-red);
 }
 
 @media (max-width: 700px){
-  .card{ padding: 18px; }
-  .row{ grid-template-columns: 1fr; }
-  button, .btn-secondary{ max-width: 100%; }
-}
+  .card{ padding:18px; }
+  .row{ grid-template-columns:1fr; }
+  .row > div{ max-width:none; }
+  input, select, textarea{
+    max-width:100%;
+    width:100%;
+  }
+  h1{ letter-spacing:0.5px; }
+} /* <-- важно: закрыли @media */
 </style>
 </head>
 <body>
@@ -631,7 +561,11 @@ __BODY__
   document.querySelectorAll('form').forEach((f) => {
     f.addEventListener('submit', () => {
       const btns = f.querySelectorAll('button[type="submit"]');
-      btns.forEach(b => { b.disabled = true; b.dataset._txt = b.textContent; b.textContent = 'Отправка… / Sending…'; });
+      btns.forEach(b => {
+        b.disabled = true;
+        b.dataset._txt = b.textContent;
+        b.textContent = 'Отправка… / Sending…';
+      });
     });
   });
 
@@ -665,10 +599,10 @@ def form():
         d = default_date
 
     hot_items = hot_menu_with_special(office, d)
-
     ok_time, start, end, now_ = validate_order_time(d)
 
     conn = db()
+    ensure_columns(conn)
     cnt = conn.execute(
         "SELECT COUNT(*) as c FROM orders WHERE office=? AND order_date=? AND status='active'",
         (office, d.isoformat()),
@@ -693,125 +627,127 @@ def form():
 
     office_opts = "".join([f"<option value='{o}' {'selected' if o==office else ''}>{o}</option>" for o in OFFICES])
 
+    # Drinks select html
+    drink_options = "".join([f"<option value='{k}'>{lbl}</option>" for (k, lbl, _) in DRINKS])
+
     body = f"""
 <div style="text-align:center; margin-bottom:18px;">
   <img src="/logo.png" alt="VOLGA" style="max-height:90px;">
 </div>
 
-<h1>РЕСТОРАН VOLGA — БИЗНЕС-ЛАНЧ ДЛЯ RingCentral<br>
-<small>VOLGA RESTAURANT — BUSINESS LUNCH FOR RingCentral</small></h1>
+<h1>РЕСТОРАН VOLGA — БИЗНЕС-ЛАНЧ ДЛЯ RINGCENTRAL<br>
+<small>VOLGA RESTAURANT — BUSINESS LUNCH FOR RINGCENTRAL</small></h1>
 
 <p class="lead">
   Доставка в 13:00. Заказ до 11:00.<br>
   <span class="en">Delivery at 13:00. Order before 11:00.</span>
 </p>
 
-<div class="hours">
-  <div class="ru">Часы работы: ВТОРНИК — ПЯТНИЦА, 13:00–16:00</div>
-  <div class="en">Working hours: TUESDAY — FRIDAY, 13:00–16:00</div>
-</div>
+<p class="section-title">Заказывать можно:</p>
+<ul class="notes">
+  <li>на сегодня — до 11:00</li>
+  <li>на завтра — после 11:00</li>
+</ul>
+
+<p class="section-title">You can order:</p>
+<ul class="notes">
+  <li>for today — until 11:00</li>
+  <li>for tomorrow — after 11:00</li>
+</ul>
 
 {warn}
 
 <div class="card">
   <form method="post" action="/order" autocomplete="on">
-
     <div class="row">
       <div>
         <label>Офис / Office</label>
-        <select id="office" name="office" onchange="reloadWithParams()" required>
+        <select id="office" name="office" required>
           {office_opts}
         </select>
       </div>
       <div>
         <label>Дата доставки / Delivery date</label>
-        <input id="order_date" type="date" name="order_date" value="{d.isoformat()}" onchange="reloadWithParams()" required>
+        <input id="order_date" type="date" name="order_date" value="{d.isoformat()}" required>
       </div>
     </div>
 
     <div class="row">
       <div>
         <label>Как вас зовут / Your name</label>
-        <input name="name" placeholder="" required>
+        <input name="name" required>
       </div>
       <div>
         <label>Телефон / Phone</label>
-        <input name="phone" placeholder="" required>
+        <input name="phone" required>
         <small>для связи и поиска заказа / for contact & order lookup</small>
       </div>
     </div>
 
-    <div class="banner-wrap">
-      <img src="/banner.png" alt="Options banner">
+    <!-- БАННЕР ВМЕСТО КАРТОЧКИ С ОПЦИЯМИ -->
+    <div style="margin-top:18px;">
+      <img src="/banner.png" alt="Options" style="width:100%; display:block; border:2px solid var(--volga-blue);">
     </div>
 
-    <div class="row">
+    <div class="row" style="margin-top:12px;">
       <div>
         <label>Закуска / Starter</label>
         <select id="zakuska" name="zakuska">
           <option value="">— без закуски / no starter —</option>
-          {options_html_ru_en(MENU["zakuska"])}
+          {options_html(MENU["zakuska"])}
         </select>
       </div>
       <div>
         <label>Суп / Soup</label>
         <select id="soup" name="soup" required>
           <option value="">— выбери суп / choose soup —</option>
-          {options_html_ru_en(MENU["soup"])}
+          {options_html(MENU["soup"])}
         </select>
       </div>
     </div>
 
     <div class="row">
       <div>
-        <label>Горячее / Main</label>
+        <label>Горячее (по желанию) / Main (optional)</label>
         <select id="hot" name="hot">
           <option value="">— без горячего / no main —</option>
-          {options_html_ru_en(hot_items)}
+          {options_html(hot_items)}
         </select>
       </div>
       <div>
-        <label>Десерт / Dessert</label>
+        <label>Десерт (по желанию) / Dessert (optional)</label>
         <select id="dessert" name="dessert">
           <option value="">— без десерта / no dessert —</option>
-          {options_html_ru_en(MENU["dessert"])}
+          {options_html(MENU["dessert"])}
         </select>
       </div>
     </div>
 
-    <label>Напиток (дополнительно) / Drink (extra)</label>
+    <!-- НАПИТОК (ДО ХЛЕБА) -->
+    <label>Напиток (оплачивается отдельно) / Drink (paid separately)</label>
     <select id="drink" name="drink">
-      <option value="">— без напитка / no drink —</option>
-      {options_html_ru_en(DRINKS)}
+      {drink_options}
     </select>
-    <small>Напиток не входит в опции и оплачивается дополнительно / Drinks are not included and are charged extra.</small>
+    <small>Не входит в стоимость опции / Not included in option price</small>
 
-    <label>Хлеб (бесплатно) / Bread (free)</label>
+    <label style="margin-top:16px;">Хлеб (бесплатно) / Bread (free)</label>
     <select id="bread" name="bread">
       <option value="">— без хлеба / no bread —</option>
-      {options_html_ru_en(BREAD_OPTIONS)}
+      {options_html(BREAD_OPTIONS)}
     </select>
 
     <label>Комментарий (если есть аллергии или пожелания) / Notes (allergies/requests)</label>
     <textarea name="comment" rows="3" placeholder="Без лука / No onion, аллергия / allergy..."></textarea>
 
-    <div class="actions">
-      <button type="submit" {"disabled" if (not ok_time or limit_reached) else ""}>Подтвердить заказ / Confirm order</button>
+    <button type="submit" style="margin-top:22px;" {"disabled" if (not ok_time or limit_reached) else ""}>
+      Подтвердить заказ / Confirm order
+    </button>
+
+    <div style="margin-top:18px;">
       <a class="btn-secondary" href="/edit">Изменить / отменить заказ / Edit / cancel</a>
     </div>
   </form>
 </div>
-
-<script>
-function reloadWithParams(){
-  const o = document.getElementById('office').value;
-  const d = document.getElementById('order_date').value;
-  const url = new URL(window.location.href);
-  url.searchParams.set('office', o);
-  url.searchParams.set('date', d);
-  window.location.href = url.toString();
-}
-</script>
 """
     return html_page(body)
 
@@ -850,8 +786,11 @@ def order():
     hot = (request.form.get("hot", "") or "").strip() or None
     dessert = (request.form.get("dessert", "") or "").strip() or None
 
-    drink = (request.form.get("drink", "") or "").strip() or None
-    drink_price = float(drink_price_by_ru(drink)) if drink else 0.0
+    drink_code = (request.form.get("drink", "") or "").strip()
+    if drink_code not in DRINK_PRICE:
+        drink_code = ""
+    drink_label = DRINK_LABEL.get(drink_code, "") if drink_code else None
+    drink_price = float(DRINK_PRICE.get(drink_code, 0.0))
 
     bread = (request.form.get("bread", "") or "").strip() or None
     comment = (request.form.get("comment", "") or "").strip() or None
@@ -859,13 +798,14 @@ def order():
     if not name or not soup or not phone_norm:
         return html_page("<p class='danger'>Ошибка: имя, телефон и суп обязательны / Name, phone and soup are required.</p><p><a href='/'>Назад / Back</a></p>"), 400
 
-    option_code, base_price, err = compute_option_and_price(zakuska, soup, hot, dessert, office, d)
+    option_code, base_price, err = compute_option_base_price(zakuska, soup, hot, dessert, office, d)
     if err:
         return html_page(f"<p class='danger'>Ошибка: {err}</p><p><a href='/'>Назад / Back</a></p>"), 400
 
-    total_price = float(base_price) + float(drink_price)
+    total_price = compute_total_price(base_price, drink_code)
 
     conn = db()
+    ensure_columns(conn)
     try:
         conn.execute("BEGIN IMMEDIATE")
 
@@ -892,7 +832,8 @@ def order():
                     <div class="card">
                       <p>На этот телефон уже оформлен активный заказ на <b>{d.isoformat()}</b> ({office}).</p>
                       <p><small>An active order already exists for this phone on <b>{d.isoformat()}</b> ({office}).</small></p>
-                      <p><span class="pill">Номер / Code: {existing['order_code']}</span> <span class="pill">Итого / Total: {eur(existing['price_eur'])}</span></p>
+                      <p><span class="pill">Номер / Code: {existing['order_code']}</span>
+                         <span class="pill">Итого / Total: {existing['price_eur']}€</span></p>
                       <p><a href="/edit?office={office}&date={d.isoformat()}&phone={phone_raw}">Открыть / Open /edit</a></p>
                     </div>
                     <p><a href="/">Назад / Back</a></p>
@@ -908,17 +849,17 @@ def order():
             INSERT INTO orders(
               order_code, office, order_date, name, phone_raw, phone_norm,
               zakuska, soup, hot, dessert,
-              drink, drink_price_eur,
+              drink_code, drink_label, drink_price_eur,
               bread,
               option_code, price_eur, comment, status, created_at
             )
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """,
             (
                 order_code, office, d.isoformat(),
                 name, phone_raw, phone_norm,
                 zakuska, soup, hot, dessert,
-                drink, drink_price,
+                drink_code or None, drink_label, drink_price if drink_code else None,
                 bread,
                 option_code, float(total_price), comment,
                 "active", datetime.utcnow().isoformat()
@@ -937,7 +878,7 @@ def order():
 
     opt_human = {"opt1": "Опция 1 / Option 1", "opt2": "Опция 2 / Option 2", "opt3": "Опция 3 / Option 3"}[option_code]
 
-    drink_line = f"<li>Напиток / Drink: {drink} (+{eur(drink_price)})</li>" if drink else "<li>Напиток / Drink: —</li>"
+    drink_line = f"{drink_label} (+{drink_price}€)" if drink_code else "—"
 
     return html_page(
         f"""
@@ -946,13 +887,13 @@ def order():
         <p><span class="pill"><b>{order_code}</b></span></p>
         <p><b>{name}</b> — {office} — <span class="muted">{phone_raw}</span></p>
         <p>Дата доставки / Delivery date: <b>{d.isoformat()}</b> (13:00)</p>
-        <p><span class="pill">{opt_human}</span><span class="pill">Итого / Total: {eur(total_price)}</span></p>
+        <p><span class="pill">{opt_human}</span><span class="pill">Итого / Total: {total_price}€</span></p>
         <ul>
           <li>Закуска / Starter: {zakuska or "—"}</li>
           <li>Суп / Soup: {soup}</li>
           <li>Горячее / Main: {hot or "—"}</li>
           <li>Десерт / Dessert: {dessert or "—"}</li>
-          {drink_line}
+          <li>Напиток / Drink: {drink_line}</li>
           <li>Хлеб / Bread: {bread or "—"}</li>
         </ul>
         <p class="muted">Комментарий / Notes: {comment or "—"}</p>
@@ -984,16 +925,24 @@ def edit_get():
     phone_norm = normalize_phone(phone_raw) if phone_raw else ""
 
     found = None
+    conn = db()
+    ensure_columns(conn)
     if phone_norm:
-        conn = db()
         found = conn.execute(
             "SELECT * FROM orders WHERE office=? AND order_date=? AND phone_norm=? AND status='active'",
             (office, d.isoformat(), phone_norm),
         ).fetchone()
-        conn.close()
+    conn.close()
 
     ok_time, start, end, now_ = validate_order_time(d)
     office_opts = "".join([f"<option value='{o}' {'selected' if o==office else ''}>{o}</option>" for o in OFFICES])
+
+    drink_options = ""
+    for (k, lbl, _) in DRINKS:
+        sel = ""
+        if found and (found["drink_code"] or "") == (k or ""):
+            sel = "selected"
+        drink_options += f"<option value='{k}' {sel}>{lbl}</option>"
 
     if found:
         hot_items = hot_menu_with_special(office, d)
@@ -1002,9 +951,9 @@ def edit_get():
         if is_closed_day(d):
             closed_msg = "<p class='danger'><b>В понедельник мы не работаем.</b><br><small>We are closed on Mondays.</small></p>"
 
-        # For selects: we will set selected via JS using stored RU values
         body = f"""
-        <h1>Изменить / отменить заказ<br><small class="muted">Edit / cancel order</small></h1>
+        <h1>Изменить / отменить заказ<br><small>Edit / cancel order</small></h1>
+
         <div class="card">
           <p><span class="pill"><b>{found['order_code']}</b></span>
              <span class="pill">Доставка / Delivery: {d.isoformat()} 13:00</span></p>
@@ -1028,16 +977,16 @@ def edit_get():
             <div class="row">
               <div>
                 <label>Закуска / Starter</label>
-                <select name="zakuska" id="zakuska">
-                  <option value="">— без закуски / no starter —</option>
-                  {options_html_ru_en(MENU["zakuska"])}
+                <select name="zakuska">
+                  <option value="" {"selected" if not found["zakuska"] else ""}>— без закуски / no starter —</option>
+                  {options_html(MENU["zakuska"])}
                 </select>
               </div>
               <div>
                 <label>Суп / Soup</label>
-                <select name="soup" id="soup" required>
+                <select name="soup" required>
                   <option value="">— выбери суп / choose soup —</option>
-                  {options_html_ru_en(MENU["soup"])}
+                  {options_html(MENU["soup"])}
                 </select>
               </div>
             </div>
@@ -1045,41 +994,37 @@ def edit_get():
             <div class="row">
               <div>
                 <label>Горячее / Main</label>
-                <select name="hot" id="hot">
-                  <option value="">— без горячего / no main —</option>
-                  {options_html_ru_en(hot_items)}
+                <select name="hot">
+                  <option value="" {"selected" if not found["hot"] else ""}>— без горячего / no main —</option>
+                  {options_html(hot_items)}
                 </select>
               </div>
               <div>
                 <label>Десерт / Dessert</label>
-                <select name="dessert" id="dessert">
-                  <option value="">— без десерта / no dessert —</option>
-                  {options_html_ru_en(MENU["dessert"])}
+                <select name="dessert">
+                  <option value="" {"selected" if not found["dessert"] else ""}>— без десерта / no dessert —</option>
+                  {options_html(MENU["dessert"])}
                 </select>
               </div>
             </div>
 
-            <label>Напиток (дополнительно) / Drink (extra)</label>
-            <select name="drink" id="drink">
-              <option value="">— без напитка / no drink —</option>
-              {options_html_ru_en(DRINKS)}
-            </select>
+            <label>Напиток (оплачивается отдельно) / Drink (paid separately)</label>
+            <select name="drink">{drink_options}</select>
+            <small>Не входит в стоимость опции / Not included in option price</small>
 
-            <label>Хлеб (бесплатно) / Bread (free)</label>
-            <select name="bread" id="bread">
-              <option value="">— без хлеба / no bread —</option>
-              {options_html_ru_en(BREAD_OPTIONS)}
+            <label style="margin-top:16px;">Хлеб (бесплатно) / Bread (free)</label>
+            <select name="bread">
+              <option value="" {"selected" if not found["bread"] else ""}>— без хлеба / no bread —</option>
+              {options_html(BREAD_OPTIONS)}
             </select>
 
             <label>Комментарий / Notes</label>
             <textarea name="comment" rows="3">{found["comment"] or ""}</textarea>
 
-            <div class="actions">
-              <button type="submit" {"disabled" if not ok_time else ""}>Сохранить / Save</button>
-            </div>
+            <button type="submit" style="margin-top:22px;" {"disabled" if not ok_time else ""}>Сохранить / Save</button>
           </form>
 
-          <form method="post" action="/cancel" style="margin-top:14px;">
+          <form method="post" action="/cancel" style="margin-top:12px;">
             <input type="hidden" name="office" value="{office}">
             <input type="hidden" name="order_date" value="{d.isoformat()}">
             <input type="hidden" name="phone" value="{found['phone_raw']}">
@@ -1089,29 +1034,11 @@ def edit_get():
           <p class="muted">Телефон / Phone: <b>{found['phone_raw']}</b></p>
           <p><a href="/">← На главную / Home</a></p>
         </div>
-
-        <script>
-          (function(){
-            function setVal(name, val){
-              const el = document.getElementById(name);
-              if(!el) return;
-              for(const opt of el.options){
-                if(opt.value === val) { opt.selected = true; return; }
-              }
-            }
-            setVal("zakuska", {repr(found["zakuska"] or "")});
-            setVal("soup", {repr(found["soup"] or "")});
-            setVal("hot", {repr(found["hot"] or "")});
-            setVal("dessert", {repr(found["dessert"] or "")});
-            setVal("drink", {repr(found["drink"] or "")});
-            setVal("bread", {repr(found["bread"] or "")});
-          })();
-        </script>
         """
         return html_page(body)
 
     body = f"""
-    <h1>Изменить / отменить заказ<br><small class="muted">Edit / cancel order</small></h1>
+    <h1>Изменить / отменить заказ<br><small>Edit / cancel order</small></h1>
     <div class="card">
       <form method="get" action="/edit">
         <div class="row">
@@ -1128,9 +1055,7 @@ def edit_get():
         <label>Телефон (как в заказе) / Phone (as in order)</label>
         <input name="phone" value="{phone_raw}" placeholder="+34..." required>
 
-        <div class="actions">
-          <button type="submit">Найти заказ / Find order</button>
-        </div>
+        <button type="submit">Найти заказ / Find order</button>
       </form>
 
       <p class="muted">Если заказ не найден — проверь офис, дату и телефон.<br>
@@ -1174,8 +1099,11 @@ def edit_post():
     hot = (request.form.get("hot", "") or "").strip() or None
     dessert = (request.form.get("dessert", "") or "").strip() or None
 
-    drink = (request.form.get("drink", "") or "").strip() or None
-    drink_price = float(drink_price_by_ru(drink)) if drink else 0.0
+    drink_code = (request.form.get("drink", "") or "").strip()
+    if drink_code not in DRINK_PRICE:
+        drink_code = ""
+    drink_label = DRINK_LABEL.get(drink_code, "") if drink_code else None
+    drink_price = float(DRINK_PRICE.get(drink_code, 0.0))
 
     bread = (request.form.get("bread", "") or "").strip() or None
     comment = (request.form.get("comment", "") or "").strip() or None
@@ -1183,13 +1111,14 @@ def edit_post():
     if not name or not soup:
         return html_page("<p class='danger'>Ошибка: имя и суп обязательны / Name and soup are required.</p><p><a href='/edit'>Назад / Back</a></p>"), 400
 
-    option_code, base_price, err = compute_option_and_price(zakuska, soup, hot, dessert, office, d)
+    option_code, base_price, err = compute_option_base_price(zakuska, soup, hot, dessert, office, d)
     if err:
         return html_page(f"<p class='danger'>Ошибка: {err}</p><p><a href='/edit'>Назад / Back</a></p>"), 400
 
-    total_price = float(base_price) + float(drink_price)
+    total_price = compute_total_price(base_price, drink_code)
 
     conn = db()
+    ensure_columns(conn)
     existing = conn.execute(
         "SELECT * FROM orders WHERE office=? AND order_date=? AND phone_norm=? AND status='active'",
         (office, d.isoformat(), phone_norm),
@@ -1203,17 +1132,22 @@ def edit_post():
         """
         UPDATE orders
         SET name=?, zakuska=?, soup=?, hot=?, dessert=?,
-            drink=?, drink_price_eur=?,
+            drink_code=?, drink_label=?, drink_price_eur=?,
             bread=?, option_code=?, price_eur=?, comment=?
         WHERE id=?
         """,
-        (name, zakuska, soup, hot, dessert, drink, drink_price, bread, option_code, float(total_price), comment, existing["id"]),
+        (
+            name, zakuska, soup, hot, dessert,
+            drink_code or None, drink_label, drink_price if drink_code else None,
+            bread, option_code, float(total_price), comment,
+            existing["id"],
+        ),
     )
     conn.commit()
     conn.close()
 
     opt_human = {"opt1": "Опция 1 / Option 1", "opt2": "Опция 2 / Option 2", "opt3": "Опция 3 / Option 3"}[option_code]
-    drink_line = f"<li>Напиток / Drink: {drink} (+{eur(drink_price)})</li>" if drink else "<li>Напиток / Drink: —</li>"
+    drink_line = f"{drink_label} (+{drink_price}€)" if drink_code else "—"
 
     return html_page(
         f"""
@@ -1222,13 +1156,13 @@ def edit_post():
         <p><span class="pill"><b>{existing['order_code']}</b></span></p>
         <p><b>{name}</b> — {office} — <span class="muted">{existing['phone_raw']}</span></p>
         <p>Дата доставки / Delivery date: <b>{d.isoformat()}</b> (13:00)</p>
-        <p><span class="pill">{opt_human}</span><span class="pill">Итого / Total: {eur(total_price)}</span></p>
+        <p><span class="pill">{opt_human}</span><span class="pill">Итого / Total: {total_price}€</span></p>
         <ul>
           <li>Закуска / Starter: {zakuska or "—"}</li>
           <li>Суп / Soup: {soup}</li>
           <li>Горячее / Main: {hot or "—"}</li>
           <li>Десерт / Dessert: {dessert or "—"}</li>
-          {drink_line}
+          <li>Напиток / Drink: {drink_line}</li>
           <li>Хлеб / Bread: {bread or "—"}</li>
         </ul>
         <p class="muted">Комментарий / Notes: {comment or "—"}</p>
@@ -1266,6 +1200,7 @@ def cancel_post():
         return html_page("<p class='danger'>Ошибка: телефон обязателен / Phone is required.</p><p><a href='/edit'>Назад / Back</a></p>"), 400
 
     conn = db()
+    ensure_columns(conn)
     existing = conn.execute(
         "SELECT * FROM orders WHERE office=? AND order_date=? AND phone_norm=? AND status='active'",
         (office, d.isoformat(), phone_norm),
@@ -1311,6 +1246,8 @@ def admin():
         d = date.today()
 
     conn = db()
+    ensure_columns(conn)
+
     active_rows = conn.execute(
         """
         SELECT * FROM orders
@@ -1331,12 +1268,16 @@ def admin():
 
     opt_counts = {"opt1": 0, "opt2": 0, "opt3": 0}
     dish_counts = {}
+    drink_counts = {}
+
     for r in active_rows:
         opt_counts[r["option_code"]] += 1
-        for k in ["zakuska", "soup", "hot", "dessert", "drink", "bread"]:
+        for k in ["zakuska", "soup", "hot", "dessert", "bread"]:
             v = r[k]
             if v:
                 dish_counts[v] = dish_counts.get(v, 0) + 1
+        if r["drink_label"]:
+            drink_counts[r["drink_label"]] = drink_counts.get(r["drink_label"], 0) + 1
 
     special = get_weekly_special(office, d)
     conn.close()
@@ -1346,15 +1287,16 @@ def admin():
     def rows_list(rows):
         items = ""
         for r in rows:
-            items += f"<li><b>{r['order_code']}</b> — <b>{r['name']}</b> <small class='muted'>({r['phone_raw']})</small> — {eur(r['price_eur'])} — {r['soup']}"
+            items += f"<li><b>{r['order_code']}</b> — <b>{r['name']}</b> <small class='muted'>({r['phone_raw']})</small> — <b>{r['price_eur']}€</b> — {r['soup']}"
             if r["zakuska"]:
                 items += f" / {r['zakuska']}"
             if r["hot"]:
                 items += f" / {r['hot']}"
             if r["dessert"]:
                 items += f" / {r['dessert']}"
-            if r["drink"]:
-                items += f" / {r['drink']}"
+            if r["drink_label"]:
+                dp = r["drink_price_eur"] or 0
+                items += f" / 🍹 {r['drink_label']} (+{dp}€)"
             if r["bread"]:
                 items += f" / {r['bread']}"
             if r["comment"]:
@@ -1363,36 +1305,35 @@ def admin():
         return items or "<li class='muted'>—</li>"
 
     dish_list = "".join([f"<li>{k} — {v}</li>" for k, v in sorted(dish_counts.items(), key=lambda x: (-x[1], x[0]))])
+    drink_list = "".join([f"<li>{k} — {v}</li>" for k, v in sorted(drink_counts.items(), key=lambda x: (-x[1], x[0]))]) or "<li class='muted'>—</li>"
 
-    special_block = "<p class='muted'>Блюдо недели: —</p>"
+    special_block = "<p class='muted'>Блюдо недели / Weekly special: —</p>"
     if special:
-        special_block = f"<p><b>Блюдо недели:</b> {special['title']} (доплата +{int(special['surcharge_eur'])}€) <small class='muted'>[{special['start_date']} … {special['end_date']}]</small></p>"
+        special_block = f"<p><b>Блюдо недели / Weekly special:</b> {special['title']} (доплата +{int(special['surcharge_eur'])}€) <small class='muted'>[{special['start_date']} … {special['end_date']}]</small></p>"
 
     body = f"""
-    <h1>Админка</h1>
+    <h1>Админка / Admin</h1>
 
     <div class="card">
       <form method="get" action="/admin">
         <input type="hidden" name="token" value="{ADMIN_TOKEN}">
         <div class="row">
           <div>
-            <label>Офис</label>
+            <label>Офис / Office</label>
             <select name="office">{office_opts}</select>
           </div>
           <div>
-            <label>Дата</label>
+            <label>Дата / Date</label>
             <input type="date" name="date" value="{d.isoformat()}">
           </div>
         </div>
-        <div class="actions">
-          <button type="submit">Показать</button>
-        </div>
+        <button type="submit">Показать / Show</button>
       </form>
 
-      <p>
-        <a href="/export.csv?office={office}&date={d.isoformat()}&token={ADMIN_TOKEN}">⬇️ CSV (активные)</a>
+      <p style="margin-top:14px;">
+        <a href="/export.csv?office={office}&date={d.isoformat()}&token={ADMIN_TOKEN}">⬇️ CSV (активные) / active</a>
         &nbsp;|&nbsp;
-        <a href="/admin/special?office={office}&date={d.isoformat()}&token={ADMIN_TOKEN}">⭐ Блюдо недели</a>
+        <a href="/admin/special?office={office}&date={d.isoformat()}&token={ADMIN_TOKEN}">⭐ Блюдо недели / weekly special</a>
       </p>
 
       {special_block}
@@ -1405,18 +1346,23 @@ def admin():
     </div>
 
     <div class="card">
-      <h3>Список активных заказов</h3>
+      <h3>Список активных заказов / Active orders</h3>
       <ol>{rows_list(active_rows)}</ol>
     </div>
 
     <div class="card">
-      <h3>Отменённые заказы</h3>
+      <h3>Отменённые заказы / Cancelled</h3>
       <ol>{rows_list(cancelled_rows)}</ol>
     </div>
 
     <div class="card">
-      <h3>Сводка по блюдам (активные)</h3>
+      <h3>Сводка по блюдам (активные) / Dishes summary</h3>
       <ul>{dish_list or "<li class='muted'>—</li>"}</ul>
+    </div>
+
+    <div class="card">
+      <h3>Сводка по напиткам (активные) / Drinks summary</h3>
+      <ul>{drink_list}</ul>
     </div>
     """
     return html_page(body)
@@ -1447,10 +1393,10 @@ def admin_special_get():
     office_opts = "".join([f"<option value='{o}' {'selected' if o==office else ''}>{o}</option>" for o in OFFICES])
 
     body = f"""
-    <h1>Блюдо недели</h1>
+    <h1>Блюдо недели / Weekly special</h1>
     <div class="card">
       <form method="post" action="/admin/special?token={ADMIN_TOKEN}">
-        <label>Офис</label>
+        <label>Офис / Office</label>
         <select name="office" required>{office_opts}</select>
 
         <div class="row">
@@ -1470,13 +1416,11 @@ def admin_special_get():
         <label>Доплата, €</label>
         <input name="surcharge_eur" type="number" min="0" step="1" value="{surcharge_default}" required>
 
-        <div class="actions">
-          <button type="submit">Сохранить</button>
-        </div>
+        <button type="submit">Сохранить / Save</button>
       </form>
 
       <p class="muted">После сохранения появится в “Горячее” как “Блюдо недели: … (+X€)”.</p>
-      <p><a href="/admin?office={office}&date={d.isoformat()}&token={ADMIN_TOKEN}">← Назад в админку</a></p>
+      <p><a href="/admin?office={office}&date={d.isoformat()}&token={ADMIN_TOKEN}">← Назад / Back</a></p>
     </div>
     """
     return html_page(body)
@@ -1538,10 +1482,14 @@ def export_csv():
         d = date.today()
 
     conn = db()
+    ensure_columns(conn)
+
     rows = conn.execute(
         """
         SELECT order_code, office, order_date, name, phone_raw, option_code, price_eur,
-               zakuska, soup, hot, dessert, drink, drink_price_eur, bread, comment, status, created_at
+               zakuska, soup, hot, dessert,
+               drink_label, drink_price_eur,
+               bread, comment, status, created_at
         FROM orders
         WHERE office=? AND order_date=? AND status='active'
         ORDER BY created_at ASC
@@ -1555,7 +1503,7 @@ def export_csv():
         s = s.replace('"', '""')
         return f'"{s}"'
 
-    header = "order_code,office,order_date,name,phone,option_code,price_eur,zakuska,soup,hot,dessert,drink,drink_price_eur,bread,comment,status,created_at"
+    header = "order_code,office,order_date,name,phone,option_code,total_eur,zakuska,soup,hot,dessert,drink,drink_price_eur,bread,comment,status,created_at"
     lines = [header]
     for r in rows:
         lines.append(
@@ -1572,7 +1520,7 @@ def export_csv():
                     esc(r["soup"]),
                     esc(r["hot"]),
                     esc(r["dessert"]),
-                    esc(r["drink"]),
+                    esc(r["drink_label"]),
                     esc(r["drink_price_eur"]),
                     esc(r["bread"]),
                     esc(r["comment"]),
