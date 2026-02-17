@@ -667,8 +667,8 @@ def form():
   <img src="/logo.png" alt="VOLGA" style="max-height:90px;">
 </div>
 
-<h1>РЕСТОРАН VOLGA — БИЗНЕС-ЛАНЧ ДЛЯ RINGCENTRAL<br>
-<small>VOLGA RESTAURANT — BUSINESS LUNCH FOR RINGCENTRAL</small></h1>
+<h1>БИЗНЕС-ЛАНЧ ДЛЯ RingCentral<br>
+<small>BUSINESS LUNCH FOR RingCentral</small></h1>
 
 <p class="lead">
   Доставка в 13:00. Заказ до 11:00.<br>
@@ -676,8 +676,8 @@ def form():
 </p>
 
 <p class="hours">
-  <span class="ru">Часы работы: Вторник — Пятница</span><br>
-  <span class="en">Hours: Tuesday — Friday</span>
+  <span class="ru">Вторник — Пятница</span><br>
+  <span class="en">Tuesday — Friday</span>
 </p>
 
 {warn}
@@ -730,14 +730,14 @@ def form():
 
     <div class="row">
       <div>
-        <label>Горячее (по желанию) / Main (optional)</label>
+        <label>Горячее / Main </label>
         <select id="hot" name="hot">
           <option value="">— без горячего / no main —</option>
           {options_html(hot_items)}
         </select>
       </div>
       <div>
-        <label>Десерт (по желанию) / Dessert (optional)</label>
+        <label>Десерт / Dessert </label>
         <select id="dessert" name="dessert">
           <option value="">— без десерта / no dessert —</option>
           {options_html(MENU["dessert"])}
@@ -745,18 +745,18 @@ def form():
       </div>
     </div>
 
-    <label>Напиток (оплачивается отдельно) / Drink (paid separately)</label>
+    <label>Напиток / Drink </label>
     <select id="drink" name="drink">{drink_options}</select>
     <small>Не входит в стоимость опции / Not included in option price</small>
 
-    <label style="margin-top:16px;">Хлеб (бесплатно) / Bread (free)</label>
+    <label style="margin-top:16px;">Хлеб / Bread </label>
     <select id="bread" name="bread">
       <option value="">— без хлеба / no bread —</option>
       {options_html(BREAD_OPTIONS)}
     </select>
 
-    <label>Комментарий (если есть аллергии или пожелания) / Notes (allergies/requests)</label>
-    <textarea name="comment" rows="3" placeholder="Без лука / No onion, аллергия / allergy..."></textarea>
+    <label>Комментарий / Notes </label>
+    <textarea name="comment" rows="3" placeholder=""></textarea>
 
  <button type="submit" class="btn-confirm" style="margin-top:22px;">
   Подтвердить заказ / Confirm order
@@ -764,7 +764,7 @@ def form():
 
 
     <a href="/edit" class="btn-edit">
-  Изменить / отменить заказ / Edit / cancel
+  Изменить или отменить заказ / Edit or cancel
 </a>
 
   </form>
@@ -1080,6 +1080,7 @@ def cancel_post():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
