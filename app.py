@@ -492,9 +492,11 @@ input:focus, select:focus, textarea:focus{
 .row{
   display:grid;
   grid-template-columns:minmax(0,1fr) minmax(0,1fr);
-  gap:18px;
+  column-gap:18px;   /* горизонталь */
+  row-gap:16px;      /* вертикаль */
   align-items:start;
 }
+
 
 .row > div{
   width:100%;
@@ -593,7 +595,7 @@ a:hover{ color:var(--volga-red); }
 
 @media (max-width: 700px){
   .card{ padding:20px; }
-  .row{ grid-template-columns:1fr; gap:16px; }
+  .row{ grid-template-columns:1fr; column-gap:0; row-gap:16px; }
   .row > div{ max-width:none; }
   input, select, textarea{ max-width:100%; }
   h1{ letter-spacing:0.5px; }
@@ -709,9 +711,7 @@ a:hover{ color:var(--volga-red); }
   .admin-table td.created{ display:none; }
 }
 /* === FIX: одинаковые интервалы между полями (особенно mobile) === */
-.row{
-  row-gap:16px;          /* вертикальный шаг между полями в гриде */
-}
+
 
 /* убираем влияние margin-top у инпутов на общий ритм */
 input, select, textarea{ margin-top:0; }
@@ -733,6 +733,15 @@ small{
 /* чуть выравниваем “не входит в стоимость...” чтобы не делал ощущение хаоса */
 @media (max-width:700px){
   small{ margin-bottom:2px; }
+}
+/* small не должен увеличивать высоту блока */
+.row > div{ position:relative; padding-bottom:18px; } /* резерв под small */
+.row > div small{
+  position:absolute;
+  left:0;
+  right:0;
+  bottom:0;
+  margin:0;
 }
 
 
@@ -1763,6 +1772,7 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
