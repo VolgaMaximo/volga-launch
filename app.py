@@ -741,6 +741,40 @@ small{
 textarea{
   margin-bottom:18px;   /* оставляем комфортный отступ */
 }
+/* === ЕДИНЫЙ ВЕРТИКАЛЬНЫЙ РИТМ ФОРМЫ === */
+
+/* расстояние между блоками .row */
+.row{
+  margin-top:14px;
+  row-gap:10px;
+}
+
+/* баннер — такое же расстояние как у остальных блоков */
+.banner-block{
+  margin-top:14px;
+}
+
+/* одиночные поля (напиток, хлеб, комментарий) */
+form > label{
+  margin-top:14px;
+}
+
+/* расстояние label → поле */
+label + input,
+label + select,
+label + textarea{
+  margin-top:6px;
+}
+
+/* убираем влияние margin у инпутов */
+input, select, textarea{
+  margin-top:0;
+}
+
+/* уменьшаем расстояние у комментария, чтобы не было "провала" */
+textarea{
+  margin-bottom:4px;
+}
 
 
 </style>
@@ -868,11 +902,12 @@ def form():
       </div>
     </div>
 
-    <div style="margin-top:18px;">
-      <img src="/banner.png" alt="Options" style="width:100%; display:block; border:2px solid var(--volga-blue);">
-    </div>
+   <div class="banner-block">
+  <img src="/banner.png" alt="Options" style="width:100%; display:block; border:2px solid var(--volga-blue);">
+</div>
 
-    <div class="row" style="margin-top:12px;">
+
+    <div class="row">
       <div>
         <label>Закуска / Starter</label>
         <select id="zakuska" name="zakuska">
@@ -911,7 +946,7 @@ def form():
       <div>
         <label>Напиток / Drink</label>
         <select id="drink" name="drink">{drink_options}</select>
-        <small>не входит в стоимость опции / not included in option price</small>
+        <small>оплачивается отдельно / not included </small>
       </div>
 
       <div>
@@ -923,7 +958,7 @@ def form():
       </div>
     </div>
 
-    <div style="margin-top:12px;">
+    <div>
       <label>Комментарий / Notes</label>
       <textarea name="comment" rows="3" placeholder=""></textarea>
     </div>
@@ -1780,6 +1815,7 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
