@@ -476,7 +476,7 @@ input, select, textarea{
   width:100%;
   max-width:520px;
   padding:12px;
-  margin-top:6px;
+  margin-top:0px;
   font-size:16px;
   background:var(--volga-bg);
   color:var(--volga-blue);
@@ -742,6 +742,20 @@ small{
   right:0;
   bottom:0;
   margin:0;
+}
+/* === FIX: одинаковые вертикальные интервалы между блоками формы === */
+
+/* расстояние МЕЖДУ рядами (.row) внутри формы */
+form > .row{
+  margin-top: 16px;
+}
+form > .row:first-of-type{
+  margin-top: 0;
+}
+
+/* расстояние перед одиночными label (которые НЕ внутри .row) */
+form > label{
+  margin-top: 16px;
 }
 
 
@@ -1772,6 +1786,7 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
