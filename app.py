@@ -1119,7 +1119,110 @@ def edit_get():
 
 @app.post("/edit")
 def edit_post():
-    return Response("Edit POST not included in this minimal reset. If you need it, tell me and I’ll paste it back.", status=501)
+    office = (request.form.get("office", "") or "").strip()
+    if office not in OFFICES:
+        return html_page("<p class='danger'>Ошибка: неизвестный офис / Unknown office.</p><p><a href='/edit'>Назад / Back</a></p>"), 400
+
+    order_date = (request.form.get("order_date", "") or "").strip()
+    try:
+        d = date.fromisoformat(order_date)
+    except ValueError:
+        return html_page("<p class='danger'>Ошибка: неверная дата / Invalid date.</p><p><a href='/edit'>Назад / Back</a></p>"), 400
+
+    ok_time, start, end, now_ = validate_order_time(d)
+    if not ok_time:
+        if is_closed_day(d):
+            return html_page("<p class='danger'><b>В понедельник мы не работаем.</b><br><small>We are closed on Mondays.</small></p><p><a href='/edit'>Назад / Back</a></p>"), 403
+        return html_page(
+            f"<p class='danger'><b>Окно редактирования закрыто.</b><br>"
+            f"<small>Окно: {start.strftime('%d.%m %H:%M')} — {end.strftime('%d.%m %H:%M')}. Сейчас: {now_.strftime('%d.%m %H:%M')}.</small></p>"
+            f"<p><a href='/edit'>Назад / Back</a></p>"
+        ), 403
+
+    phone_raw = (request.form.get("phone", "") or "").strip()
+    phone_norm = normalize_phone(phone_raw)
+    if not phone_norm:
+        return html_page("<p class='danger'>Ошибка: телефон обязателен / Phone is required.</p><p><a href='/edit'>Назад / Back</a></p>"), 400
+
+    name = (request.form.get("name", "") or "").strip()
+    zakuska = (request.form.get("zakuska", "") or "").strip() or None
+    soup = (request.form.get("soup", "") or "").strip()
+    hot = (request.form.get("hot", "") or "").strip() or None
+    dessert = (request.form.get("dessert", "") or "").strip() or None
+
+    drink_code = (request.form.get("drink", "") or "").strip()
+    if drink_code not in DRINK_PRICE:
+        drink_code = ""
+    drink_label = DRINK_LABEL.get(drink_code, "") if drink_code else None
+    drink_price = float(DRINK_PRICE.get(drink_code, 0.0))
+
+    bread = (request.form.get("bread", "") or "").strip() or None
+    comment = (request.form.get("comment", "") or "").strip() or None
+
+    if not name or not soup:
+        return html_page("<p class='danger'>Ошибка: имя и суп обязательны / Name and soup are required.</p><p><a href='/edit'>Назад / Back</a></p>"), 400
+
+    option_code, base_price, err = compute_option_base_price(zakuska, soup, hot, dessert, office, d)
+    if err:
+        return html_page(f"<p class='danger'>Ошибка: {err}</p><p><a href='/edit'>Назад / Back</a></p>"), 400
+
+    total_price = compute_total_price(base_price, drink_code)
+
+    conn = db()
+    ensure_columns(conn)
+
+    existing = conn.execute(
+        "SELECT * FROM orders WHERE office=? AND order_date=? AND phone_norm=? AND status='active'",
+        (office, d.isoformat(), phone_norm),
+    ).fetchone()
+
+    if not existing:
+        conn.close()
+        return html_page("<p class='danger'>Активный заказ не найден / Active order not found.</p><p><a href='/edit'>Назад / Back</a></p>"), 404
+
+    conn.execute(
+        """
+        UPDATE orders
+        SET name=?, zakuska=?, soup=?, hot=?, dessert=?,
+            drink_code=?, drink_label=?, drink_price_eur=?,
+            bread=?, option_code=?, price_eur=?, comment=?
+        WHERE id=?
+        """,
+        (
+            name, zakuska, soup, hot, dessert,
+            drink_code or None, drink_label, drink_price if drink_code else None,
+            bread, option_code, float(total_price), comment,
+            existing["id"],
+        ),
+    )
+    conn.commit()
+    conn.close()
+
+    opt_human = {"opt1": "Опция 1 / Option 1", "opt2": "Опция 2 / Option 2", "opt3": "Опция 3 / Option 3"}[option_code]
+    drink_line = f"{drink_label} (+{drink_price}€)" if drink_code else "—"
+
+    return html_page(
+        f"""
+      <h2>✅ Изменения сохранены / Saved</h2>
+      <div class="card">
+        <p><span class="pill"><b>{existing['order_code']}</b></span></p>
+        <p><b>{name}</b> — {office} — <span class="muted">{existing['phone_raw']}</span></p>
+        <p>Дата доставки / Delivery date: <b>{d.isoformat()}</b> (13:00)</p>
+        <p><span class="pill">{opt_human}</span><span class="pill">Итого / Total: {total_price}€</span></p>
+        <ul>
+          <li>Закуска / Starter: {zakuska or "—"}</li>
+          <li>Суп / Soup: {soup}</li>
+          <li>Горячее / Main: {hot or "—"}</li>
+          <li>Десерт / Dessert: {dessert or "—"}</li>
+          <li>Напиток / Drink: {drink_line}</li>
+          <li>Хлеб / Bread: {bread or "—"}</li>
+        </ul>
+        <p class="muted">Комментарий / Notes: {comment or "—"}</p>
+      </div>
+      <p><a href="/">← На главную / Home</a></p>
+    """
+    )
+
 
 
 @app.post("/cancel")
@@ -1133,6 +1236,7 @@ def cancel_post():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
