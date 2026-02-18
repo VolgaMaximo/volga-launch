@@ -794,10 +794,10 @@ label{
 /* small максимально близко к полю */
 small{
   display:block;
-  margin-top:2px;
-  margin-bottom:0;
+  margin:4px 0 0 0;   /* ближе к полю */
   line-height:1.1;
 }
+
 /* === FIX: small внутри .row не должен увеличивать высоту ряда === */
 .row small{
   display:block;
@@ -1851,6 +1851,7 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
