@@ -1227,7 +1227,58 @@ def edit_post():
 
 @app.post("/cancel")
 def cancel_post():
-    return Response("Cancel POST not included in this minimal reset. If you need it, tell me and I’ll paste it back.", status=501)
+    office = (request.form.get("office", "") or "").strip()
+    if office not in OFFICES:
+        return html_page("<p class='danger'>Ошибка: неизвестный офис / Unknown office.</p><p><a href='/edit'>Назад / Back</a></p>"), 400
+
+    order_date = (request.form.get("order_date", "") or "").strip()
+    try:
+        d = date.fromisoformat(order_date)
+    except ValueError:
+        return html_page("<p class='danger'>Ошибка: неверная дата / Invalid date.</p><p><a href='/edit'>Назад / Back</a></p>"), 400
+
+    ok_time, start, end, now_ = validate_order_time(d)
+    if not ok_time:
+        if is_closed_day(d):
+            return html_page("<p class='danger'><b>В понедельник мы не работаем.</b><br><small>We are closed on Mondays.</small></p><p><a href='/edit'>Назад / Back</a></p>"), 403
+        return html_page(
+            f"<p class='danger'><b>Окно отмены закрыто.</b><br>"
+            f"<small>Окно: {start.strftime('%d.%m %H:%M')} — {end.strftime('%d.%m %H:%M')}. Сейчас: {now_.strftime('%d.%m %H:%M')}.</small></p>"
+            f"<p><a href='/edit'>Назад / Back</a></p>"
+        ), 403
+
+    phone_raw = (request.form.get("phone", "") or "").strip()
+    phone_norm = normalize_phone(phone_raw)
+    if not phone_norm:
+        return html_page("<p class='danger'>Ошибка: телефон обязателен / Phone is required.</p><p><a href='/edit'>Назад / Back</a></p>"), 400
+
+    conn = db()
+    ensure_columns(conn)
+
+    existing = conn.execute(
+        "SELECT * FROM orders WHERE office=? AND order_date=? AND phone_norm=? AND status='active'",
+        (office, d.isoformat(), phone_norm),
+    ).fetchone()
+
+    if not existing:
+        conn.close()
+        return html_page("<p class='danger'>Активный заказ не найден / Active order not found.</p><p><a href='/edit'>Назад / Back</a></p>"), 404
+
+    conn.execute("UPDATE orders SET status='cancelled' WHERE id=?", (existing["id"],))
+    conn.commit()
+    conn.close()
+
+    return html_page(
+        f"""
+      <h2>🗑 Заказ отменён / Order cancelled</h2>
+      <div class="card">
+        <p><span class="pill"><b>{existing['order_code']}</b></span></p>
+        <p><b>{existing['name']}</b> — {office} — <span class="muted">{existing['phone_raw']}</span></p>
+        <p>Дата доставки / Delivery date: <b>{d.isoformat()}</b> (13:00)</p>
+      </div>
+      <p><a href="/">← На главную / Home</a></p>
+    """
+    )
 
 
 # ---------------------------
@@ -1236,6 +1287,7 @@ def cancel_post():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
