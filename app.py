@@ -1420,20 +1420,17 @@ def cancel_post():
     )
 
 
-# ---------------------------
-# Admin/CSV оставляем как следующий шаг (сначала убираем 500)
-# ---------------------------
-
-# ---------------------------
-# Админка + Блюдо недели + CSV (РУС)
-# ---------------------------
+# ===========================
+# Admin (RU only) + Tables + Summary + CSV (semicolon + BOM)
+# ===========================
 
 def _ru_only(s: str) -> str:
     """Берём только часть до ' / ' (RU из 'RU / EN')."""
     s = "" if s is None else str(s)
     return s.split(" / ")[0].strip()
 
-# Сокращения блюд (можно дополнять как угодно)
+
+# Сокращения блюд (можешь дополнять)
 SHORT = {
     "Оливье": "Оливье",
     "Винегрет": "Винегрет",
@@ -1443,10 +1440,10 @@ SHORT = {
 
     "Борщ": "Борщ",
     "Солянка сборная мясная": "Солянка",
-    "Куриный с домашней лапшой и яйцом": "Куриный суп",
+    "Куриный с домашней лапшой и яйцом": "Кур. суп",
 
-    "Куриные котлеты с пюре": "Котлеты+пюре",
-    "Куриные котлеты с гречкой": "Котлеты+греча",
+    "Куриные котлеты с пюре": "Котл+пюре",
+    "Куриные котлеты с гречкой": "Котл+греча",
     "Вареники с картошкой": "Вареники",
     "Пельмени со сметаной": "Пельмени",
     "Плов с бараниной (+3€)": "Плов",
@@ -1459,17 +1456,19 @@ SHORT = {
     "Чёрный": "Хлеб чёрный",
 }
 
+
 def _short_name(s: str) -> str:
     """Сначала берём RU, потом пытаемся сократить."""
     ru = _ru_only(s)
-    # если это "Белый / White" — сначала ru станет "Белый"
     return SHORT.get(ru, ru)
+
 
 def _fmt_money(x):
     try:
         return f"{float(x):.2f}€"
     except Exception:
         return f"{x}€"
+
 
 def _rows_table(rows):
     head = """
@@ -1496,11 +1495,14 @@ def _rows_table(rows):
 
     body = ""
     for r in rows:
-        # напиток только RU (и без англ)
+        # напиток (RU only)
         drink = "—"
-        if "drink_label" in r.keys() and r["drink_label"]:
-            dp = r["drink_price_eur"] or 0
-            drink = f"{_ru_only(r['drink_label'])} (+{float(dp):.2f}€)"
+        try:
+            if r["drink_label"]:
+                dp = r["drink_price_eur"] or 0
+                drink = f"{_ru_only(r['drink_label'])} (+{float(dp):.2f}€)"
+        except Exception:
+            drink = "—"
 
         body += f"""
         <tr>
@@ -1518,6 +1520,27 @@ def _rows_table(rows):
         </tr>
         """
     return head + body + "</tbody></table>"
+
+
+def _summary_table(title: str, counts: dict) -> str:
+    rows_html = ""
+    for k, v in sorted(counts.items(), key=lambda x: (-x[1], x[0])):
+        rows_html += f"<tr><td>{k}</td><td><b>{v}</b></td></tr>"
+
+    if not rows_html:
+        rows_html = "<tr><td colspan='2' class='muted'>—</td></tr>"
+
+    return f"""
+    <div class="card">
+      <h3>{title}</h3>
+      <table class="admin-table">
+        <thead><tr><th>Позиция</th><th>Кол-во</th></tr></thead>
+        <tbody>
+          {rows_html}
+        </tbody>
+      </table>
+    </div>
+    """
 
 
 @app.get("/admin")
@@ -1556,15 +1579,33 @@ def admin():
         (office, d.isoformat()),
     ).fetchall()
 
+    # опции
     opt_counts = {"opt1": 0, "opt2": 0, "opt3": 0}
+
+    # сводки
+    dish_counts = {}
+    drink_counts = {}
+
     for r in active_rows:
         if r["option_code"] in opt_counts:
             opt_counts[r["option_code"]] += 1
 
+        for k in ["soup", "zakuska", "hot", "dessert", "bread"]:
+            v = r[k]
+            if v:
+                vv = _short_name(v)
+                dish_counts[vv] = dish_counts.get(vv, 0) + 1
+
+        if r["drink_label"]:
+            dd = _ru_only(r["drink_label"])
+            drink_counts[dd] = drink_counts.get(dd, 0) + 1
+
     special = get_weekly_special(office, d)
     conn.close()
 
-    office_opts = "".join([f"<option value='{o}' {'selected' if o==office else ''}>{o}</option>" for o in OFFICES])
+    office_opts = "".join(
+        [f"<option value='{o}' {'selected' if o==office else ''}>{o}</option>" for o in OFFICES]
+    )
 
     special_block = "<p class='muted'>Блюдо недели: —</p>"
     if special:
@@ -1590,7 +1631,7 @@ def admin():
             <input type="date" name="date" value="{d.isoformat()}">
           </div>
         </div>
-        <button type="submit">Показать</button>
+        <button class="btn-primary" type="submit">Показать</button>
       </form>
 
       <p style="margin-top:14px;">
@@ -1617,6 +1658,9 @@ def admin():
       <h3>Отменённые заказы</h3>
       {_rows_table(cancelled_rows)}
     </div>
+
+    {_summary_table("Сводка по блюдам (активные)", dish_counts)}
+    {_summary_table("Сводка по напиткам (активные)", drink_counts)}
     """
     return html_page(body)
 
@@ -1669,7 +1713,7 @@ def admin_special_get():
         <label>Доплата, €</label>
         <input name="surcharge_eur" type="number" min="0" step="1" value="{surcharge_default}" required>
 
-        <button type="submit">Сохранить</button>
+        <button class="btn-primary" type="submit">Сохранить</button>
       </form>
 
       <p class="muted">После сохранения появится в “Горячее” как “Блюдо недели: … (+X€)”.</p>
@@ -1753,8 +1797,7 @@ def export_csv():
 
     def esc(s):
         s = "" if s is None else str(s)
-        # убираем EN и сокращаем блюда в CSV тоже
-        s = _short_name(s) if " / " in s else s
+        s = _short_name(s)  # ВСЕГДА пытаемся привести к RU+короткому
         s = s.replace('"', '""')
         return f'"{s}"'
 
@@ -1799,6 +1842,7 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
