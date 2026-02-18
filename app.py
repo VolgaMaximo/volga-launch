@@ -710,52 +710,36 @@ a:hover{ color:var(--volga-red); }
   .admin-table th.created,
   .admin-table td.created{ display:none; }
 }
-/* === FIX: одинаковые интервалы между полями (особенно mobile) === */
+/* === ТОНКАЯ НАСТРОЙКА ИНТЕРВАЛОВ === */
 
+/* уменьшаем вертикальный шаг грида */
+.row{
+  row-gap:8px;   /* было 16px */
+}
 
-/* убираем влияние margin-top у инпутов на общий ритм */
-input, select, textarea{ margin-top:0; }
-
-/* делаем строгое расстояние: label -> поле */
+/* расстояние label → поле */
 label + input,
 label + select,
 label + textarea{
-  margin-top:6px;
+  margin-top:4px;   /* было 6px */
 }
 
-/* подсказки под полем (small) не должны ломать ритм */
+/* расстояние после поля до следующего label */
+input,
+select{
+  margin-bottom:8px;   /* добавляем контрольный ритм */
+}
+
+/* подсказки под полем */
 small{
   display:block;
-  margin-top:6px;
+  margin-top:4px;
   line-height:1.2;
 }
 
-/* чуть выравниваем “не входит в стоимость...” чтобы не делал ощущение хаоса */
-@media (max-width:700px){
-  small{ margin-bottom:2px; }
-}
-/* small не должен увеличивать высоту блока */
-.row > div{ position:relative; padding-bottom:18px; } /* резерв под small */
-.row > div small{
-  position:absolute;
-  left:0;
-  right:0;
-  bottom:0;
-  margin:0;
-}
-/* === FIX: одинаковые вертикальные интервалы между блоками формы === */
-
-/* расстояние МЕЖДУ рядами (.row) внутри формы */
-form > .row{
-  margin-top: 16px;
-}
-form > .row:first-of-type{
-  margin-top: 0;
-}
-
-/* расстояние перед одиночными label (которые НЕ внутри .row) */
-form > label{
-  margin-top: 16px;
+/* НО не трогаем блок комментария */
+textarea{
+  margin-bottom:18px;   /* оставляем комфортный отступ */
 }
 
 
@@ -1786,6 +1770,7 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
