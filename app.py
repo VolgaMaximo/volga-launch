@@ -756,10 +756,7 @@ textarea{
   margin-top:10px;
 }
 
-/* одиночные поля (напиток, хлеб, комментарий) */
-form > label{
-  margin-top:6px;
-}
+
 
 /* расстояние label → поле */
 label + input,
@@ -776,6 +773,30 @@ input, select, textarea{
 /* уменьшаем расстояние у комментария, чтобы не было "провала" */
 textarea{
   margin-bottom:4px;
+}
+/* === ЕДИНАЯ ВЕРТИКАЛЬНАЯ СЕТКА === */
+
+/* каждый прямой ребёнок формы получает одинаковый шаг */
+form > * + *{
+  margin-top:10px;
+}
+
+/* внутри row вертикальный шаг чуть меньше */
+.row{
+  row-gap:10px;
+}
+
+/* label ближе к своему полю */
+label{
+  margin-bottom:4px;
+}
+
+/* small максимально близко к полю */
+small{
+  display:block;
+  margin-top:2px;
+  margin-bottom:0;
+  line-height:1.1;
 }
 
 
@@ -1817,6 +1838,7 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
