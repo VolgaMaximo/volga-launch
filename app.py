@@ -466,7 +466,7 @@ h1 small{
 
 label{
   display:block;
-  margin-top:10px;
+  margin-top:0px;
   font-weight:800;
   overflow-wrap:anywhere;
   color:var(--volga-red); /* <-- заголовки полей КРАСНЫЕ (как ты просил) */
@@ -492,7 +492,7 @@ input:focus, select:focus, textarea:focus{
 .row{
   display:grid;
   grid-template-columns:minmax(0,1fr) minmax(0,1fr);
-  gap:14px;
+  gap:18px;
   align-items:start;
 }
 
@@ -569,7 +569,7 @@ a:hover{ color:var(--volga-red); }
   width:100%;
   max-width:520px;
   padding:16px 24px;
-  font-size:16px;
+    font-size:16px;
   font-weight:800;
 
   background:var(--volga-red);
@@ -588,12 +588,12 @@ a:hover{ color:var(--volga-red); }
 
 .btn-secondary:hover{
   background: var(--volga-blue);
-  text-align:center;
+  .btn-secondary{ text-align:center !important; }
   color: var(--volga-bg);
 }
 .btn-secondary:active{
   background: var(--volga-red);
-  text-align:center;
+  .btn-secondary{ text-align:center !important; }
   border-color: var(--volga-red);
   color: var(--volga-bg);
 }
@@ -1744,6 +1744,7 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
