@@ -446,6 +446,22 @@ h1 small{
     
 }
 
+.hero-title{
+  text-align:center;
+  font-weight:800;
+  font-size:28px;
+  line-height:1.15;
+  letter-spacing:1px;
+  margin-bottom:14px;
+}
+
+.hero-title .ru{
+  color: var(--volga-blue);
+}
+
+.hero-title .en{
+  color: var(--volga-red);
+}
 
 
 label{
@@ -569,10 +585,12 @@ a:hover{ color:var(--volga-red); }
 
 .btn-secondary:hover{
   background: var(--volga-blue);
+  text-align:center;
   color: var(--volga-bg);
 }
 .btn-secondary:active{
   background: var(--volga-red);
+  text-align:center;
   border-color: var(--volga-red);
   color: var(--volga-bg);
 }
@@ -695,8 +713,11 @@ def form():
 </div>
 
 
-<h1>БИЗНЕС-ЛАНЧ RingCentral<br>
-<small>BUSINESS LUNCH RingCentral</small></h1>
+<h1 class="hero-title">
+  <span class="ru">БИЗНЕС-ЛАНЧ RingCentral</span><br>
+  <span class="en">BUSINESS LUNCH RingCentral</span>
+</h1>
+
 
 <p class="lead">
   Доставка в 13:00. Заказ до 11:00.<br>
@@ -775,7 +796,7 @@ def form():
 
     <label>Напиток / Drink </label>
     <select id="drink" name="drink">{drink_options}</select>
-    <small>Не входит в стоимость опции / Not included in option price</small>
+    <small>не входит в стоимость опции / not included in option price</small>
 
     <label style="margin-top:16px;">Хлеб / Bread </label>
     <select id="bread" name="bread">
@@ -1108,6 +1129,7 @@ def cancel_post():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
