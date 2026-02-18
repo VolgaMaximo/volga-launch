@@ -525,12 +525,14 @@ a:hover{ color:var(--volga-red); }
 }
 .lead .en{
   color:var(--volga-red);
+  text-align:center;
   font-weight:800;
 }
 
 /* Часы работы: RU синий, EN красный */
 .hours{
   margin:14px 0 0 0;
+  text-align:center;
   font-weight:900;
 }
 .hours .ru{ color:var(--volga-blue); }
@@ -708,9 +710,10 @@ def form():
     drink_options = "".join([f"<option value='{k}'>{lbl}</option>" for (k, lbl, _) in DRINKS])
 
     body = f"""
-<div style="margin-bottom:18px;">
-  <img src="/logo.png" alt="VOLGA" style="max-height:90px; display:block;">
+<div style="text-align:center; margin-bottom:18px;">
+  <img src="/logo.png" alt="VOLGA" style="max-height:90px;">
 </div>
+
 
 
 <h1 class="hero-title">
@@ -1129,6 +1132,7 @@ def cancel_post():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
