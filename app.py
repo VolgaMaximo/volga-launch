@@ -710,106 +710,49 @@ a:hover{ color:var(--volga-red); }
   .admin-table th.created,
   .admin-table td.created{ display:none; }
 }
-/* === ТОНКАЯ НАСТРОЙКА ИНТЕРВАЛОВ === */
 
-/* уменьшаем вертикальный шаг грида */
+/* === FORM SPACING (single source of truth) === */
+
+/* 1) Grid spacing inside .row */
 .row{
-  row-gap:8px;   /* было 16px */
+  display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+  column-gap:18px;
+  row-gap:10px;          /* ← твой целевой интервал */
+  align-items:start;
+  margin-top:10px;       /* ← одинаковый шаг между row-блоками */
 }
 
-/* расстояние label → поле */
-label + input,
-label + select,
-label + textarea{
-  margin-top:4px;   /* было 6px */
+/* mobile: one column, same rhythm */
+@media (max-width: 700px){
+  .row{
+    grid-template-columns:1fr;
+    column-gap:0;
+    row-gap:10px;
+    margin-top:10px;
+  }
 }
 
-/* расстояние после поля до следующего label */
-input,
-select{
-  margin-bottom:8px;   /* добавляем контрольный ритм */
+/* 2) Label + field spacing */
+label{
+  display:block;
+  margin:0 0 4px 0;      /* ← label ближе к полю */
 }
 
-/* подсказки под полем */
+input, select, textarea{
+  margin:0;              /* ← убираем margin полностью */
+}
+
+/* 3) Small text close to the field */
 small{
   display:block;
-  margin-top:2px;
-  margin-bottom:2px;   /* добавляем */
+  margin:2px 0 0 0;      /* ← прижали small вверх */
   line-height:1.1;
 }
 
-
-/* НО не трогаем блок комментария */
-textarea{
-  margin-bottom:18px;   /* оставляем комфортный отступ */
-}
-/* === ЕДИНЫЙ ВЕРТИКАЛЬНЫЙ РИТМ ФОРМЫ === */
-
-/* расстояние между блоками .row */
-.row{
-  margin-top:10px;
-  row-gap:8px;
-}
-
-/* баннер — такое же расстояние как у остальных блоков */
+/* 4) Banner spacing matches rows */
 .banner-block{
   margin-top:10px;
-}
-
-
-
-/* расстояние label → поле */
-label + input,
-label + select,
-label + textarea{
-  margin-top:6px;
-}
-
-/* убираем влияние margin у инпутов */
-input, select, textarea{
-  margin-top:0;
-}
-
-/* уменьшаем расстояние у комментария, чтобы не было "провала" */
-textarea{
-  margin-bottom:4px;
-}
-/* === ЕДИНАЯ ВЕРТИКАЛЬНАЯ СЕТКА === */
-
-/* каждый прямой ребёнок формы получает одинаковый шаг */
-form > * + *{
-  margin-top:10px;
-}
-
-/* внутри row вертикальный шаг чуть меньше */
-.row{
-  row-gap:10px;
-}
-
-/* label ближе к своему полю */
-label{
-  margin-bottom:4px;
-}
-
-/* small максимально близко к полю */
-small{
-  display:block;
-  margin:4px 0 0 0;   /* ближе к полю */
-  line-height:1.1;
-}
-
-/* === FIX: small внутри .row не должен увеличивать высоту ряда === */
-.row small{
-  display:block;
-  margin-top:2px !important;
-  margin-bottom:-10px !important; /* компенсируем высоту small, чтобы ряд не раздувался */
-  line-height:1.1;
-}
-
-/* общий small (например под напитком) — без отрицательного отступа */
-form > small{
-  margin-top:2px !important;
-  margin-bottom:0 !important;
 }
 
 
@@ -1851,6 +1794,7 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
