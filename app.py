@@ -634,6 +634,57 @@ a:hover{ color:var(--volga-red); }
     margin-right: 2px;
   }
 }
+/* --- ADMIN BUTTONS STYLE --- */
+
+.btn-primary{
+  display:block;
+  width:100%;
+  margin-top:20px;
+  padding:14px 24px;
+  font-size:16px;
+  font-weight:700;
+  border:2px solid var(--volga-blue);
+  background:var(--volga-blue);
+  color:var(--volga-bg);
+  border-radius:0;
+  text-align:center;
+}
+
+.btn-primary:hover{
+  background:var(--volga-red);
+  border-color:var(--volga-red);
+}
+
+.btn-primary:active{
+  background:var(--volga-red);
+  border-color:var(--volga-red);
+}
+
+.btn-danger{
+  display:block;
+  width:100%;
+  margin-top:14px;
+  padding:14px 24px;
+  font-size:16px;
+  font-weight:700;
+  border:2px solid var(--volga-red);
+  background:var(--volga-red);
+  color:var(--volga-bg);
+  border-radius:0;
+  text-align:center;
+}
+
+.btn-danger:hover{
+  background:var(--volga-blue);
+  border-color:var(--volga-blue);
+}
+
+.btn-danger:active{
+  background:var(--volga-blue);
+  border-color:var(--volga-blue);
+}
+
+
 
 </style>
 </head>
@@ -1073,14 +1124,16 @@ def edit_get():
             <label>Комментарий / Notes</label>
             <textarea name="comment" rows="3">{found["comment"] or ""}</textarea>
 
-            <button type="submit" style="margin-top:30px;" {"disabled" if not ok_time else ""}>Сохранить / Save</button>
+            <button type="submit" class="btn-primary">Сохранить / Save</button>
+
           </form>
 
           <form method="post" action="/cancel" style="margin-top:12px;">
             <input type="hidden" name="office" value="{office}">
             <input type="hidden" name="order_date" value="{d.isoformat()}">
             <input type="hidden" name="phone" value="{found['phone_raw']}">
-            <button type="submit" {"disabled" if not ok_time else ""}>Отменить заказ / Cancel</button>
+            <button type="submit" class="btn-danger">Отменить заказ / Cancel</button>
+
           </form>
 
           <p style="margin-top:16px;"><a href="/">← На главную / Home</a></p>
@@ -1603,6 +1656,7 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
