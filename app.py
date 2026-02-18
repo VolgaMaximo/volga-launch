@@ -1341,10 +1341,72 @@ def cancel_post():
 # ---------------------------
 # Admin + Weekly special + CSV
 # ---------------------------
+# ---------------------------
+# Админка + Блюдо недели + CSV
+# ---------------------------
+
+def _fmt_money(x):
+    try:
+        return f"{float(x):.2f}€"
+    except Exception:
+        return f"{x}€"
+
+
+def _rows_table(rows):
+    head = """
+    <table class="admin-table">
+      <thead>
+        <tr>
+          <th>Код</th>
+          <th>Имя</th>
+          <th>Телефон</th>
+          <th>Итого</th>
+          <th>Суп</th>
+          <th>Закуска</th>
+          <th>Горячее</th>
+          <th>Десерт</th>
+          <th>Напиток</th>
+          <th>Хлеб</th>
+          <th>Комментарий</th>
+          <th class="created">Создан</th>
+        </tr>
+      </thead>
+      <tbody>
+    """
+    if not rows:
+        return head + "<tr><td colspan='12' class='muted'>—</td></tr></tbody></table>"
+
+    body = ""
+    for r in rows:
+        # напиток (если есть)
+        drink = "—"
+        if "drink_label" in r.keys() and r["drink_label"]:
+            dp = r["drink_price_eur"] or 0
+            drink = f"{r['drink_label']} (+{_fmt_money(dp).replace('€','')}€)"
+
+        body += f"""
+        <tr>
+          <td><b>{r['order_code']}</b></td>
+          <td>{r['name']}</td>
+          <td>{r['phone_raw']}</td>
+          <td><b>{_fmt_money(r['price_eur'])}</b></td>
+          <td>{r['soup'] or '—'}</td>
+          <td>{r['zakuska'] or '—'}</td>
+          <td>{r['hot'] or '—'}</td>
+          <td>{r['dessert'] or '—'}</td>
+          <td>{drink}</td>
+          <td>{r['bread'] or '—'}</td>
+          <td>{r['comment'] or '—'}</td>
+          <td class="created"><small>{r['created_at'] or ''}</small></td>
+        </tr>
+        """
+    return head + body + "</tbody></table>"
+
+
 @app.get("/admin")
 def admin():
     if not check_admin():
-        return html_page("<h2>⛔ Нет доступа / Forbidden</h2><p>Нужен token / token required.</p>"), 403
+        return html_page("<h2>⛔ Нет доступа</h2><p>Нужен token.</p>"), 403
 
     office = request.args.get("office", OFFICES[0])
     if office not in OFFICES:
@@ -1378,106 +1440,65 @@ def admin():
     ).fetchall()
 
     opt_counts = {"opt1": 0, "opt2": 0, "opt3": 0}
-    dish_counts = {}
-    drink_counts = {}
-
     for r in active_rows:
-        opt_counts[r["option_code"]] = opt_counts.get(r["option_code"], 0) + 1
-        for k in ["zakuska", "soup", "hot", "dessert", "bread"]:
-            v = r[k]
-            if v:
-                dish_counts[v] = dish_counts.get(v, 0) + 1
-        if "drink_label" in r.keys() and r["drink_label"]:
-            drink_counts[r["drink_label"]] = drink_counts.get(r["drink_label"], 0) + 1
+        if r["option_code"] in opt_counts:
+            opt_counts[r["option_code"]] += 1
 
     special = get_weekly_special(office, d)
     conn.close()
 
     office_opts = "".join([f"<option value='{o}' {'selected' if o==office else ''}>{o}</option>" for o in OFFICES])
 
-    def rows_list(rows):
-        items = ""
-        for r in rows:
-            items += f"<li><b>{r['order_code']}</b> — <b>{r['name']}</b> <small class='muted'>({r['phone_raw']})</small> — <b>{r['price_eur']}€</b> — {r['soup']}"
-            if r["zakuska"]:
-                items += f" / {r['zakuska']}"
-            if r["hot"]:
-                items += f" / {r['hot']}"
-            if r["dessert"]:
-                items += f" / {r['dessert']}"
-            if "drink_label" in r.keys() and r["drink_label"]:
-                dp = r["drink_price_eur"] or 0
-                items += f" / 🍹 {r['drink_label']} (+{dp}€)"
-            if r["bread"]:
-                items += f" / {r['bread']}"
-            if r["comment"]:
-                items += f" <small class='muted'>— {r['comment']}</small>"
-            items += "</li>"
-        return items or "<li class='muted'>—</li>"
-
-    dish_list = "".join([f"<li>{k} — {v}</li>" for k, v in sorted(dish_counts.items(), key=lambda x: (-x[1], x[0]))]) or "<li class='muted'>—</li>"
-    drink_list = "".join([f"<li>{k} — {v}</li>" for k, v in sorted(drink_counts.items(), key=lambda x: (-x[1], x[0]))]) or "<li class='muted'>—</li>"
-
-    special_block = "<p class='muted'>Блюдо недели / Weekly special: —</p>"
+    special_block = "<p class='muted'>Блюдо недели: —</p>"
     if special:
         special_block = (
-            f"<p><b>Блюдо недели / Weekly special:</b> {special['title']} "
+            f"<p><b>Блюдо недели:</b> {special['title']} "
             f"(доплата +{int(special['surcharge_eur'])}€) "
             f"<small class='muted'>[{special['start_date']} … {special['end_date']}]</small></p>"
         )
 
     body = f"""
-    <h1>Админка / Admin</h1>
+    <h1>Админка</h1>
 
     <div class="card">
       <form method="get" action="/admin">
         <input type="hidden" name="token" value="{ADMIN_TOKEN}">
         <div class="row">
           <div>
-            <label>Офис / Office</label>
+            <label>Офис</label>
             <select name="office">{office_opts}</select>
           </div>
           <div>
-            <label>Дата / Date</label>
+            <label>Дата</label>
             <input type="date" name="date" value="{d.isoformat()}">
           </div>
         </div>
-        <button type="submit">Показать / Show</button>
+        <button type="submit">Показать</button>
       </form>
 
       <p style="margin-top:14px;">
-        <a href="/export.csv?office={office}&date={d.isoformat()}&token={ADMIN_TOKEN}">⬇️ CSV (active)</a>
+        <a href="/export.csv?office={office}&date={d.isoformat()}&token={ADMIN_TOKEN}">⬇️ Выгрузка CSV (активные)</a>
         &nbsp;|&nbsp;
-        <a href="/admin/special?office={office}&date={d.isoformat()}&token={ADMIN_TOKEN}">⭐ Weekly special</a>
+        <a href="/admin/special?office={office}&date={d.isoformat()}&token={ADMIN_TOKEN}">⭐ Блюдо недели</a>
       </p>
 
       {special_block}
 
       <p>
-        <span class="pill">opt1: {opt_counts.get('opt1',0)}</span>
-        <span class="pill">opt2: {opt_counts.get('opt2',0)}</span>
-        <span class="pill">opt3: {opt_counts.get('opt3',0)}</span>
+        <span class="pill">Опция 1: {opt_counts.get('opt1',0)}</span>
+        <span class="pill">Опция 2: {opt_counts.get('opt2',0)}</span>
+        <span class="pill">Опция 3: {opt_counts.get('opt3',0)}</span>
       </p>
     </div>
 
     <div class="card">
-      <h3>Активные заказы / Active</h3>
-      <ol>{rows_list(active_rows)}</ol>
+      <h3>Активные заказы</h3>
+      {_rows_table(active_rows)}
     </div>
 
     <div class="card">
-      <h3>Отменённые / Cancelled</h3>
-      <ol>{rows_list(cancelled_rows)}</ol>
-    </div>
-
-    <div class="card">
-      <h3>Сводка по блюдам / Dishes</h3>
-      <ul>{dish_list}</ul>
-    </div>
-
-    <div class="card">
-      <h3>Сводка по напиткам / Drinks</h3>
-      <ul>{drink_list}</ul>
+      <h3>Отменённые заказы</h3>
+      {_rows_table(cancelled_rows)}
     </div>
     """
     return html_page(body)
@@ -1486,7 +1507,7 @@ def admin():
 @app.get("/admin/special")
 def admin_special_get():
     if not check_admin():
-        return html_page("<h2>⛔ Нет доступа / Forbidden</h2><p>Нужен token / token required.</p>"), 403
+        return html_page("<h2>⛔ Нет доступа</h2><p>Нужен token.</p>"), 403
 
     office = request.args.get("office", OFFICES[0])
     if office not in OFFICES:
@@ -1508,34 +1529,34 @@ def admin_special_get():
     office_opts = "".join([f"<option value='{o}' {'selected' if o==office else ''}>{o}</option>" for o in OFFICES])
 
     body = f"""
-    <h1>Блюдо недели / Weekly special</h1>
+    <h1>Блюдо недели</h1>
     <div class="card">
       <form method="post" action="/admin/special?token={ADMIN_TOKEN}">
-        <label>Офис / Office</label>
+        <label>Офис</label>
         <select name="office" required>{office_opts}</select>
 
         <div class="row">
           <div>
-            <label>Start date</label>
+            <label>Начало</label>
             <input type="date" name="start_date" value="{start_default}" required>
           </div>
           <div>
-            <label>End date</label>
+            <label>Конец</label>
             <input type="date" name="end_date" value="{end_default}" required>
           </div>
         </div>
 
-        <label>Название (горячее) / Title (main)</label>
-        <input name="title" value="{title_default}" placeholder="Напр. Бефстроганов / e.g. Beef Stroganoff" required>
+        <label>Название блюда недели (горячее)</label>
+        <input name="title" value="{title_default}" placeholder="Напр. Бефстроганов" required>
 
-        <label>Доплата, € / Surcharge, €</label>
+        <label>Доплата, €</label>
         <input name="surcharge_eur" type="number" min="0" step="1" value="{surcharge_default}" required>
 
-        <button type="submit">Сохранить / Save</button>
+        <button type="submit">Сохранить</button>
       </form>
 
       <p class="muted">После сохранения появится в “Горячее” как “Блюдо недели: … (+X€)”.</p>
-      <p><a href="/admin?office={office}&date={d.isoformat()}&token={ADMIN_TOKEN}">← Назад / Back</a></p>
+      <p><a href="/admin?office={office}&date={d.isoformat()}&token={ADMIN_TOKEN}">← Назад в админку</a></p>
     </div>
     """
     return html_page(body)
@@ -1544,24 +1565,24 @@ def admin_special_get():
 @app.post("/admin/special")
 def admin_special_post():
     if not check_admin():
-        return html_page("<h2>⛔ Нет доступа / Forbidden</h2><p>Нужен token / token required.</p>"), 403
+        return html_page("<h2>⛔ Нет доступа</h2><p>Нужен token.</p>"), 403
 
     office = (request.form.get("office", "") or "").strip()
     if office not in OFFICES:
-        return html_page("<p class='danger'>Ошибка: неизвестный офис / Unknown office.</p>"), 400
+        return html_page("<p class='danger'>Ошибка: неизвестный офис.</p>"), 400
 
     try:
         start_date = date.fromisoformat((request.form.get("start_date", "") or "").strip())
         end_date = date.fromisoformat((request.form.get("end_date", "") or "").strip())
     except ValueError:
-        return html_page("<p class='danger'>Ошибка: неверные даты / Invalid dates.</p>"), 400
+        return html_page("<p class='danger'>Ошибка: неверные даты.</p>"), 400
 
     if end_date < start_date:
-        return html_page("<p class='danger'>Ошибка: end_date раньше start_date / end_date before start_date.</p>"), 400
+        return html_page("<p class='danger'>Ошибка: дата конца раньше даты начала.</p>"), 400
 
     title = (request.form.get("title", "") or "").strip()
     if not title:
-        return html_page("<p class='danger'>Ошибка: пустое название / Empty title.</p>"), 400
+        return html_page("<p class='danger'>Ошибка: пустое название.</p>"), 400
 
     try:
         surcharge = int(request.form.get("surcharge_eur", "0"))
@@ -1602,7 +1623,7 @@ def export_csv():
     rows = conn.execute(
         """
         SELECT order_code, office, order_date, name, phone_raw, option_code, price_eur,
-               zakuska, soup, hot, dessert,
+               soup, zakuska, hot, dessert,
                drink_label, drink_price_eur,
                bread, comment, status, created_at
         FROM orders
@@ -1618,7 +1639,7 @@ def export_csv():
         s = s.replace('"', '""')
         return f'"{s}"'
 
-    header = "order_code,office,order_date,name,phone,option_code,total_eur,zakuska,soup,hot,dessert,drink,drink_price_eur,bread,comment,status,created_at"
+    header = "код,офис,дата,имя,телефон,опция,итого_евро,суп,закуска,горячее,десерт,напиток,цена_напитка_евро,хлеб,комментарий,статус,создан"
     lines = [header]
     for r in rows:
         lines.append(
@@ -1631,8 +1652,8 @@ def export_csv():
                     esc(r["phone_raw"]),
                     esc(r["option_code"]),
                     esc(r["price_eur"]),
-                    esc(r["zakuska"]),
                     esc(r["soup"]),
+                    esc(r["zakuska"]),
                     esc(r["hot"]),
                     esc(r["dessert"]),
                     esc(r["drink_label"]),
@@ -1656,6 +1677,7 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
