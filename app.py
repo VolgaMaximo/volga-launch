@@ -565,11 +565,14 @@ a:hover{ color:var(--volga-red); }
 
 /* --- Вторая кнопка (Edit / Cancel) --- */
 .btn-edit{
-  display:block;
+  display:flex;
+  text-align:center;
+  align-items:center;
+  justify-content:center;
   width:100%;
   max-width:520px;
   padding:16px 24px;
-    font-size:16px;
+  font-size:16px;
   font-weight:800;
 
   background:var(--volga-red);
@@ -586,17 +589,7 @@ a:hover{ color:var(--volga-red); }
   background:var(--volga-blue);
 }
 
-.btn-secondary:hover{
-  background: var(--volga-blue);
-  .btn-secondary{ text-align:center !important; }
-  color: var(--volga-bg);
-}
-.btn-secondary:active{
-  background: var(--volga-red);
-  .btn-secondary{ text-align:center !important; }
-  border-color: var(--volga-red);
-  color: var(--volga-bg);
-}
+
 
 @media (max-width: 700px){
   .card{ padding:20px; }
@@ -714,6 +707,32 @@ a:hover{ color:var(--volga-red); }
   /* прячем “создан” на мобиле, чтобы не было каши */
   .admin-table th.created,
   .admin-table td.created{ display:none; }
+}
+/* === FIX: одинаковые интервалы между полями (особенно mobile) === */
+.row{
+  row-gap:16px;          /* вертикальный шаг между полями в гриде */
+}
+
+/* убираем влияние margin-top у инпутов на общий ритм */
+input, select, textarea{ margin-top:0; }
+
+/* делаем строгое расстояние: label -> поле */
+label + input,
+label + select,
+label + textarea{
+  margin-top:6px;
+}
+
+/* подсказки под полем (small) не должны ломать ритм */
+small{
+  display:block;
+  margin-top:6px;
+  line-height:1.2;
+}
+
+/* чуть выравниваем “не входит в стоимость...” чтобы не делал ощущение хаоса */
+@media (max-width:700px){
+  small{ margin-bottom:2px; }
 }
 
 
@@ -1744,6 +1763,7 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
