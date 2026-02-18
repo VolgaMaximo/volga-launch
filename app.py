@@ -733,7 +733,7 @@ select{
 /* подсказки под полем */
 small{
   display:block;
-  margin-top:4px;
+  margin-top:2px;
   line-height:1.2;
 }
 
@@ -745,8 +745,8 @@ textarea{
 
 /* расстояние между блоками .row */
 .row{
-  margin-top:14px;
-  row-gap:10px;
+  margin-top:10px;
+  row-gap:8px;
 }
 
 /* баннер — такое же расстояние как у остальных блоков */
@@ -756,7 +756,7 @@ textarea{
 
 /* одиночные поля (напиток, хлеб, комментарий) */
 form > label{
-  margin-top:14px;
+  margin-top:10px;
 }
 
 /* расстояние label → поле */
@@ -1815,6 +1815,7 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
