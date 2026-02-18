@@ -894,8 +894,8 @@ def order():
         if is_closed_day(d):
             return html_page("<p class='danger'><b>В понедельник мы не работаем.</b><br><small>We are closed on Mondays.</small></p><p><a href='/'>Назад / Back</a></p>"), 403
         return html_page(
-            f"<p class='danger'><b>Приём заказов закрыт.</b><br>"
-            f"<small>Окно: {start.strftime('%d.%m %H:%M')} — {end.strftime('%d.%m %H:%M')}. Сейчас: {now_.strftime('%d.%m %H:%M')}.</small></p>"
+            f"<p class='danger'><b>Приём заказов открыт на текущий день до 11:00. На следующий день после 11:00. Orders for today before 11:00. For tomorrow after 11:00.</b><br>"
+            f"<small>Доступно / Available: {start.strftime('%d.%m %H:%M')} — {end.strftime('%d.%m %H:%M')}. Сейчас / Now: {now_.strftime('%d.%m %H:%M')}.</small></p>"
             f"<p><a href='/'>Назад / Back</a></p>"
         ), 403
 
@@ -1656,6 +1656,7 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
