@@ -430,7 +430,7 @@ body{
 
 h1{
   color:var(--volga-blue);
-  font-weight:700;
+  font-weight:800;
     letter-spacing:1px;
   margin:0 0 14px 0;
       line-height:1.0;
@@ -695,8 +695,8 @@ def form():
 </div>
 
 
-<h1>БИЗНЕС-ЛАНЧ для RingCentral<br>
-<small>BUSINESS LUNCH for RingCentral</small></h1>
+<h1>БИЗНЕС-ЛАНЧ RingCentral<br>
+<small>BUSINESS LUNCH RingCentral</small></h1>
 
 <p class="lead">
   Доставка в 13:00. Заказ до 11:00.<br>
@@ -1108,6 +1108,7 @@ def cancel_post():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
