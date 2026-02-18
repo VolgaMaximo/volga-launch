@@ -591,6 +591,9 @@ a:hover{ color:var(--volga-red); }
   background:var(--volga-blue);
 }
 
+.comment-block{
+  margin-top:18px;   /* больше пространства перед комментариями */
+}
 
 
 @media (max-width: 700px){
@@ -752,8 +755,10 @@ small{
 
 /* 4) Banner spacing matches rows */
 .banner-block{
-  margin-top:10px;
+  margin-top:18px;     /* больше сверху */
+  margin-bottom:18px;  /* больше снизу */
 }
+
 
 
 </style>
@@ -937,7 +942,7 @@ def form():
       </div>
     </div>
 
-    <div>
+    <div class="comment-block">
       <label>Комментарий / Notes</label>
       <textarea name="comment" rows="3" placeholder=""></textarea>
     </div>
@@ -1794,6 +1799,7 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
