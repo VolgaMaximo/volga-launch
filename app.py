@@ -712,7 +712,7 @@ def form():
 
     body = f"""
 <div style="text-align:center; margin-bottom:18px;">
-  <img src="/logo.png" alt="VOLGA" style="max-height:90px;">
+  <img src="/logo.png" alt="VOLGA" style="max-height:120px;">
 </div>
 
 
@@ -1133,6 +1133,7 @@ def cancel_post():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
