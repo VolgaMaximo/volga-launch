@@ -520,6 +520,7 @@ a:hover{ color:var(--volga-red); }
 /* Доставка RU синий жирный, EN красный (как ты хотел) */
 .lead{
   color:var(--volga-blue);
+  text-align:center;
   font-weight:900;
   margin:12px 0 0 0;
 }
@@ -1132,6 +1133,7 @@ def cancel_post():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
