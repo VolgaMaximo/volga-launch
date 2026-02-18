@@ -1285,8 +1285,325 @@ def cancel_post():
 # Admin/CSV оставляем как следующий шаг (сначала убираем 500)
 # ---------------------------
 
+# ---------------------------
+# Admin + Weekly special + CSV
+# ---------------------------
+@app.get("/admin")
+def admin():
+    if not check_admin():
+        return html_page("<h2>⛔ Нет доступа / Forbidden</h2><p>Нужен token / token required.</p>"), 403
+
+    office = request.args.get("office", OFFICES[0])
+    if office not in OFFICES:
+        office = OFFICES[0]
+
+    d_str = request.args.get("date", date.today().isoformat())
+    try:
+        d = date.fromisoformat(d_str)
+    except ValueError:
+        d = date.today()
+
+    conn = db()
+    ensure_columns(conn)
+
+    active_rows = conn.execute(
+        """
+        SELECT * FROM orders
+        WHERE office=? AND order_date=? AND status='active'
+        ORDER BY created_at ASC
+        """,
+        (office, d.isoformat()),
+    ).fetchall()
+
+    cancelled_rows = conn.execute(
+        """
+        SELECT * FROM orders
+        WHERE office=? AND order_date=? AND status='cancelled'
+        ORDER BY created_at ASC
+        """,
+        (office, d.isoformat()),
+    ).fetchall()
+
+    opt_counts = {"opt1": 0, "opt2": 0, "opt3": 0}
+    dish_counts = {}
+    drink_counts = {}
+
+    for r in active_rows:
+        opt_counts[r["option_code"]] = opt_counts.get(r["option_code"], 0) + 1
+        for k in ["zakuska", "soup", "hot", "dessert", "bread"]:
+            v = r[k]
+            if v:
+                dish_counts[v] = dish_counts.get(v, 0) + 1
+        if "drink_label" in r.keys() and r["drink_label"]:
+            drink_counts[r["drink_label"]] = drink_counts.get(r["drink_label"], 0) + 1
+
+    special = get_weekly_special(office, d)
+    conn.close()
+
+    office_opts = "".join([f"<option value='{o}' {'selected' if o==office else ''}>{o}</option>" for o in OFFICES])
+
+    def rows_list(rows):
+        items = ""
+        for r in rows:
+            items += f"<li><b>{r['order_code']}</b> — <b>{r['name']}</b> <small class='muted'>({r['phone_raw']})</small> — <b>{r['price_eur']}€</b> — {r['soup']}"
+            if r["zakuska"]:
+                items += f" / {r['zakuska']}"
+            if r["hot"]:
+                items += f" / {r['hot']}"
+            if r["dessert"]:
+                items += f" / {r['dessert']}"
+            if "drink_label" in r.keys() and r["drink_label"]:
+                dp = r["drink_price_eur"] or 0
+                items += f" / 🍹 {r['drink_label']} (+{dp}€)"
+            if r["bread"]:
+                items += f" / {r['bread']}"
+            if r["comment"]:
+                items += f" <small class='muted'>— {r['comment']}</small>"
+            items += "</li>"
+        return items or "<li class='muted'>—</li>"
+
+    dish_list = "".join([f"<li>{k} — {v}</li>" for k, v in sorted(dish_counts.items(), key=lambda x: (-x[1], x[0]))]) or "<li class='muted'>—</li>"
+    drink_list = "".join([f"<li>{k} — {v}</li>" for k, v in sorted(drink_counts.items(), key=lambda x: (-x[1], x[0]))]) or "<li class='muted'>—</li>"
+
+    special_block = "<p class='muted'>Блюдо недели / Weekly special: —</p>"
+    if special:
+        special_block = (
+            f"<p><b>Блюдо недели / Weekly special:</b> {special['title']} "
+            f"(доплата +{int(special['surcharge_eur'])}€) "
+            f"<small class='muted'>[{special['start_date']} … {special['end_date']}]</small></p>"
+        )
+
+    body = f"""
+    <h1>Админка / Admin</h1>
+
+    <div class="card">
+      <form method="get" action="/admin">
+        <input type="hidden" name="token" value="{ADMIN_TOKEN}">
+        <div class="row">
+          <div>
+            <label>Офис / Office</label>
+            <select name="office">{office_opts}</select>
+          </div>
+          <div>
+            <label>Дата / Date</label>
+            <input type="date" name="date" value="{d.isoformat()}">
+          </div>
+        </div>
+        <button type="submit">Показать / Show</button>
+      </form>
+
+      <p style="margin-top:14px;">
+        <a href="/export.csv?office={office}&date={d.isoformat()}&token={ADMIN_TOKEN}">⬇️ CSV (active)</a>
+        &nbsp;|&nbsp;
+        <a href="/admin/special?office={office}&date={d.isoformat()}&token={ADMIN_TOKEN}">⭐ Weekly special</a>
+      </p>
+
+      {special_block}
+
+      <p>
+        <span class="pill">opt1: {opt_counts.get('opt1',0)}</span>
+        <span class="pill">opt2: {opt_counts.get('opt2',0)}</span>
+        <span class="pill">opt3: {opt_counts.get('opt3',0)}</span>
+      </p>
+    </div>
+
+    <div class="card">
+      <h3>Активные заказы / Active</h3>
+      <ol>{rows_list(active_rows)}</ol>
+    </div>
+
+    <div class="card">
+      <h3>Отменённые / Cancelled</h3>
+      <ol>{rows_list(cancelled_rows)}</ol>
+    </div>
+
+    <div class="card">
+      <h3>Сводка по блюдам / Dishes</h3>
+      <ul>{dish_list}</ul>
+    </div>
+
+    <div class="card">
+      <h3>Сводка по напиткам / Drinks</h3>
+      <ul>{drink_list}</ul>
+    </div>
+    """
+    return html_page(body)
+
+
+@app.get("/admin/special")
+def admin_special_get():
+    if not check_admin():
+        return html_page("<h2>⛔ Нет доступа / Forbidden</h2><p>Нужен token / token required.</p>"), 403
+
+    office = request.args.get("office", OFFICES[0])
+    if office not in OFFICES:
+        office = OFFICES[0]
+
+    d_str = request.args.get("date", date.today().isoformat())
+    try:
+        d = date.fromisoformat(d_str)
+    except ValueError:
+        d = date.today()
+
+    special = get_weekly_special(office, d)
+
+    start_default = d.isoformat()
+    end_default = (d + timedelta(days=6)).isoformat()
+    title_default = special["title"] if special else ""
+    surcharge_default = int(special["surcharge_eur"]) if special else 0
+
+    office_opts = "".join([f"<option value='{o}' {'selected' if o==office else ''}>{o}</option>" for o in OFFICES])
+
+    body = f"""
+    <h1>Блюдо недели / Weekly special</h1>
+    <div class="card">
+      <form method="post" action="/admin/special?token={ADMIN_TOKEN}">
+        <label>Офис / Office</label>
+        <select name="office" required>{office_opts}</select>
+
+        <div class="row">
+          <div>
+            <label>Start date</label>
+            <input type="date" name="start_date" value="{start_default}" required>
+          </div>
+          <div>
+            <label>End date</label>
+            <input type="date" name="end_date" value="{end_default}" required>
+          </div>
+        </div>
+
+        <label>Название (горячее) / Title (main)</label>
+        <input name="title" value="{title_default}" placeholder="Напр. Бефстроганов / e.g. Beef Stroganoff" required>
+
+        <label>Доплата, € / Surcharge, €</label>
+        <input name="surcharge_eur" type="number" min="0" step="1" value="{surcharge_default}" required>
+
+        <button type="submit">Сохранить / Save</button>
+      </form>
+
+      <p class="muted">После сохранения появится в “Горячее” как “Блюдо недели: … (+X€)”.</p>
+      <p><a href="/admin?office={office}&date={d.isoformat()}&token={ADMIN_TOKEN}">← Назад / Back</a></p>
+    </div>
+    """
+    return html_page(body)
+
+
+@app.post("/admin/special")
+def admin_special_post():
+    if not check_admin():
+        return html_page("<h2>⛔ Нет доступа / Forbidden</h2><p>Нужен token / token required.</p>"), 403
+
+    office = (request.form.get("office", "") or "").strip()
+    if office not in OFFICES:
+        return html_page("<p class='danger'>Ошибка: неизвестный офис / Unknown office.</p>"), 400
+
+    try:
+        start_date = date.fromisoformat((request.form.get("start_date", "") or "").strip())
+        end_date = date.fromisoformat((request.form.get("end_date", "") or "").strip())
+    except ValueError:
+        return html_page("<p class='danger'>Ошибка: неверные даты / Invalid dates.</p>"), 400
+
+    if end_date < start_date:
+        return html_page("<p class='danger'>Ошибка: end_date раньше start_date / end_date before start_date.</p>"), 400
+
+    title = (request.form.get("title", "") or "").strip()
+    if not title:
+        return html_page("<p class='danger'>Ошибка: пустое название / Empty title.</p>"), 400
+
+    try:
+        surcharge = int(request.form.get("surcharge_eur", "0"))
+        if surcharge < 0:
+            raise ValueError
+    except ValueError:
+        return html_page("<p class='danger'>Ошибка: доплата должна быть целым числом ≥ 0.</p>"), 400
+
+    conn = db()
+    conn.execute(
+        """
+        INSERT INTO weekly_special(office, start_date, end_date, title, surcharge_eur, created_at)
+        VALUES (?,?,?,?,?,?)
+        """,
+        (office, start_date.isoformat(), end_date.isoformat(), title, surcharge, datetime.utcnow().isoformat()),
+    )
+    conn.commit()
+    conn.close()
+
+    return redirect(f"/admin?office={office}&date={start_date.isoformat()}&token={ADMIN_TOKEN}")
+
+
+@app.get("/export.csv")
+def export_csv():
+    if not check_admin():
+        return Response("Forbidden\n", status=403, mimetype="text/plain")
+
+    office = request.args.get("office", OFFICES[0])
+    d_str = request.args.get("date", date.today().isoformat())
+    try:
+        d = date.fromisoformat(d_str)
+    except ValueError:
+        d = date.today()
+
+    conn = db()
+    ensure_columns(conn)
+
+    rows = conn.execute(
+        """
+        SELECT order_code, office, order_date, name, phone_raw, option_code, price_eur,
+               zakuska, soup, hot, dessert,
+               drink_label, drink_price_eur,
+               bread, comment, status, created_at
+        FROM orders
+        WHERE office=? AND order_date=? AND status='active'
+        ORDER BY created_at ASC
+        """,
+        (office, d.isoformat()),
+    ).fetchall()
+    conn.close()
+
+    def esc(s):
+        s = "" if s is None else str(s)
+        s = s.replace('"', '""')
+        return f'"{s}"'
+
+    header = "order_code,office,order_date,name,phone,option_code,total_eur,zakuska,soup,hot,dessert,drink,drink_price_eur,bread,comment,status,created_at"
+    lines = [header]
+    for r in rows:
+        lines.append(
+            ",".join(
+                [
+                    esc(r["order_code"]),
+                    esc(r["office"]),
+                    esc(r["order_date"]),
+                    esc(r["name"]),
+                    esc(r["phone_raw"]),
+                    esc(r["option_code"]),
+                    esc(r["price_eur"]),
+                    esc(r["zakuska"]),
+                    esc(r["soup"]),
+                    esc(r["hot"]),
+                    esc(r["dessert"]),
+                    esc(r["drink_label"]),
+                    esc(r["drink_price_eur"]),
+                    esc(r["bread"]),
+                    esc(r["comment"]),
+                    esc(r["status"]),
+                    esc(r["created_at"]),
+                ]
+            )
+        )
+    csv_data = "\n".join(lines) + "\n"
+
+    return Response(
+        csv_data,
+        mimetype="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="orders_{office}_{d.isoformat()}.csv"'},
+    )
+
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
