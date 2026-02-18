@@ -734,8 +734,10 @@ select{
 small{
   display:block;
   margin-top:2px;
-  line-height:1.2;
+  margin-bottom:2px;   /* добавляем */
+  line-height:1.1;
 }
+
 
 /* НО не трогаем блок комментария */
 textarea{
@@ -751,12 +753,12 @@ textarea{
 
 /* баннер — такое же расстояние как у остальных блоков */
 .banner-block{
-  margin-top:14px;
+  margin-top:10px;
 }
 
 /* одиночные поля (напиток, хлеб, комментарий) */
 form > label{
-  margin-top:10px;
+  margin-top:6px;
 }
 
 /* расстояние label → поле */
@@ -1815,6 +1817,7 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
