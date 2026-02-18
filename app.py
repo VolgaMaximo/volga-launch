@@ -10,6 +10,7 @@ from flask import Flask, request, Response, redirect, send_file, abort
 # ---------------------------
 APP_TITLE = os.getenv("APP_TITLE", "VOLGA Lunch")
 ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "change-me")
+APP_VERSION = os.getenv("APP_VERSION", "1")
 DB_PATH = os.getenv("DB_PATH", "/tmp/orders.sqlite")
 TZ = ZoneInfo(os.getenv("TZ", "Europe/Madrid"))
 
@@ -344,29 +345,46 @@ def banner_png():
 
 @app.get("/sw.js")
 def sw_js():
-    # ВАЖНО: меняй версию CACHE при изменениях, чтобы Chrome обновлялся
-    js = """
-const CACHE = 'volga-lunch-v3';
+    js = f"""
+const CACHE = 'volga-lunch-{APP_VERSION}';
 const ASSETS = ['/', '/edit', '/manifest.webmanifest', '/icon.svg', '/logo.png', '/banner.png'];
 
-self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then(cache => cache.addAll(ASSETS)));
-});
+self.addEventListener('install', (e) => {{
+  e.waitUntil(
+    caches.open(CACHE).then(cache => cache.addAll(ASSETS))
+  );
+  self.skipWaiting();
+}});
 
-self.addEventListener('fetch', (e) => {
+self.addEventListener('activate', (e) => {{
+  e.waitUntil(
+    caches.keys().then(keys =>
+      Promise.all(
+        keys.filter(k => k !== CACHE).map(k => caches.delete(k))
+      )
+    )
+  );
+  self.clients.claim();
+}});
+
+self.addEventListener('fetch', (e) => {{
   const url = new URL(e.request.url);
-  if (e.request.method === 'GET' && url.origin === self.location.origin) {
+
+  if (e.request.method === 'GET' && url.origin === self.location.origin) {{
     e.respondWith(
-      caches.match(e.request).then((cached) => cached || fetch(e.request).then((resp) => {
-        const copy = resp.clone();
-        caches.open(CACHE).then(cache => cache.put(e.request, copy)).catch(()=>{});
-        return resp;
-      }).catch(()=>cached))
+      fetch(e.request)
+        .then(resp => {{
+          const copy = resp.clone();
+          caches.open(CACHE).then(cache => cache.put(e.request, copy));
+          return resp;
+        }})
+        .catch(() => caches.match(e.request))
     );
-  }
-});
+  }}
+}});
 """
     return Response(js, mimetype="application/javascript")
+
 
 
 # ---------------------------
@@ -412,7 +430,7 @@ body{
 
 h1{
   color:var(--volga-blue);
-  font-weight:800;
+  font-weight:700;
     letter-spacing:1px;
   margin:0 0 14px 0;
       line-height:1.0;
@@ -677,8 +695,8 @@ def form():
 </div>
 
 
-<h1>БИЗНЕС-ЛАНЧ ДЛЯ RingCentral<br>
-<small>BUSINESS LUNCH FOR RingCentral</small></h1>
+<h1>БИЗНЕС-ЛАНЧ для RingCentral<br>
+<small>BUSINESS LUNCH for RingCentral</small></h1>
 
 <p class="lead">
   Доставка в 13:00. Заказ до 11:00.<br>
@@ -1090,6 +1108,7 @@ def cancel_post():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
