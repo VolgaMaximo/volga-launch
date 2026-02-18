@@ -798,6 +798,19 @@ small{
   margin-bottom:0;
   line-height:1.1;
 }
+/* === FIX: small внутри .row не должен увеличивать высоту ряда === */
+.row small{
+  display:block;
+  margin-top:2px !important;
+  margin-bottom:-10px !important; /* компенсируем высоту small, чтобы ряд не раздувался */
+  line-height:1.1;
+}
+
+/* общий small (например под напитком) — без отрицательного отступа */
+form > small{
+  margin-top:2px !important;
+  margin-bottom:0 !important;
+}
 
 
 </style>
@@ -1838,6 +1851,7 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
