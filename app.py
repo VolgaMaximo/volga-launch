@@ -889,22 +889,25 @@ def form():
       </div>
     </div>
 
-    <div class="row">
+        <div class="row">
       <div>
-        <label>Горячее / Main </label>
+        <label>Горячее / Main</label>
         <select id="hot" name="hot">
           <option value="">— без горячего / no main —</option>
           {options_html(hot_items)}
         </select>
       </div>
+
       <div>
-        <label>Десерт / Dessert </label>
+        <label>Десерт / Dessert</label>
         <select id="dessert" name="dessert">
           <option value="">— без десерта / no dessert —</option>
           {options_html(MENU["dessert"])}
         </select>
       </div>
-        <div class="row">
+    </div>
+
+    <div class="row">
       <div>
         <label>Напиток / Drink</label>
         <select id="drink" name="drink">{drink_options}</select>
@@ -924,6 +927,7 @@ def form():
       <label>Комментарий / Notes</label>
       <textarea name="comment" rows="3" placeholder=""></textarea>
     </div>
+
 
  <button type="submit" class="btn-confirm" style="margin-top:22px;">
   Подтвердить заказ / Confirm order
@@ -1776,6 +1780,7 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
