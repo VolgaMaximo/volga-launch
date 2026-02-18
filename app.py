@@ -684,6 +684,37 @@ a:hover{ color:var(--volga-red); }
   border-color:var(--volga-blue);
 }
 
+.admin-table{
+  width:100%;
+  border-collapse:collapse;
+  margin-top:10px;
+  font-size:14px;
+}
+.admin-table th,
+.admin-table td{
+  border:2px solid var(--volga-blue);
+  padding:8px 10px;
+  vertical-align:top;
+}
+.admin-table th{
+  background:var(--volga-bg);
+  color:var(--volga-blue);
+  text-align:left;
+  font-weight:800;
+}
+.admin-table td small{
+  color:var(--volga-burgundy);
+}
+.admin-table tbody tr:hover{
+  outline:2px solid var(--volga-red);
+  outline-offset:-2px;
+}
+@media (max-width: 700px){
+  .admin-table{ font-size:13px; }
+  /* прячем “создан” на мобиле, чтобы не было каши */
+  .admin-table th.created,
+  .admin-table td.created{ display:none; }
+}
 
 
 </style>
@@ -1339,18 +1370,51 @@ def cancel_post():
 # ---------------------------
 
 # ---------------------------
-# Admin + Weekly special + CSV
+# Админка + Блюдо недели + CSV (РУС)
 # ---------------------------
-# ---------------------------
-# Админка + Блюдо недели + CSV
-# ---------------------------
+
+def _ru_only(s: str) -> str:
+    """Берём только часть до ' / ' (RU из 'RU / EN')."""
+    s = "" if s is None else str(s)
+    return s.split(" / ")[0].strip()
+
+# Сокращения блюд (можно дополнять как угодно)
+SHORT = {
+    "Оливье": "Оливье",
+    "Винегрет": "Винегрет",
+    "Икра из баклажанов": "Икра",
+    "Паштет из куриной печени": "Паштет",
+    "Шуба": "Шуба",
+
+    "Борщ": "Борщ",
+    "Солянка сборная мясная": "Солянка",
+    "Куриный с домашней лапшой и яйцом": "Куриный суп",
+
+    "Куриные котлеты с пюре": "Котлеты+пюре",
+    "Куриные котлеты с гречкой": "Котлеты+греча",
+    "Вареники с картошкой": "Вареники",
+    "Пельмени со сметаной": "Пельмени",
+    "Плов с бараниной (+3€)": "Плов",
+
+    "Торт Наполеон": "Наполеон",
+    "Пирожное Картошка": "Картошка",
+    "Трубочка со сгущенкой": "Трубочка",
+
+    "Белый": "Хлеб белый",
+    "Чёрный": "Хлеб чёрный",
+}
+
+def _short_name(s: str) -> str:
+    """Сначала берём RU, потом пытаемся сократить."""
+    ru = _ru_only(s)
+    # если это "Белый / White" — сначала ru станет "Белый"
+    return SHORT.get(ru, ru)
 
 def _fmt_money(x):
     try:
         return f"{float(x):.2f}€"
     except Exception:
         return f"{x}€"
-
 
 def _rows_table(rows):
     head = """
@@ -1368,21 +1432,20 @@ def _rows_table(rows):
           <th>Напиток</th>
           <th>Хлеб</th>
           <th>Комментарий</th>
-          <th class="created">Создан</th>
         </tr>
       </thead>
       <tbody>
     """
     if not rows:
-        return head + "<tr><td colspan='12' class='muted'>—</td></tr></tbody></table>"
+        return head + "<tr><td colspan='11' class='muted'>—</td></tr></tbody></table>"
 
     body = ""
     for r in rows:
-        # напиток (если есть)
+        # напиток только RU (и без англ)
         drink = "—"
         if "drink_label" in r.keys() and r["drink_label"]:
             dp = r["drink_price_eur"] or 0
-            drink = f"{r['drink_label']} (+{_fmt_money(dp).replace('€','')}€)"
+            drink = f"{_ru_only(r['drink_label'])} (+{float(dp):.2f}€)"
 
         body += f"""
         <tr>
@@ -1390,14 +1453,13 @@ def _rows_table(rows):
           <td>{r['name']}</td>
           <td>{r['phone_raw']}</td>
           <td><b>{_fmt_money(r['price_eur'])}</b></td>
-          <td>{r['soup'] or '—'}</td>
-          <td>{r['zakuska'] or '—'}</td>
-          <td>{r['hot'] or '—'}</td>
-          <td>{r['dessert'] or '—'}</td>
+          <td>{_short_name(r['soup']) if r['soup'] else '—'}</td>
+          <td>{_short_name(r['zakuska']) if r['zakuska'] else '—'}</td>
+          <td>{_short_name(r['hot']) if r['hot'] else '—'}</td>
+          <td>{_short_name(r['dessert']) if r['dessert'] else '—'}</td>
           <td>{drink}</td>
-          <td>{r['bread'] or '—'}</td>
+          <td>{_short_name(r['bread']) if r['bread'] else '—'}</td>
           <td>{r['comment'] or '—'}</td>
-          <td class="created"><small>{r['created_at'] or ''}</small></td>
         </tr>
         """
     return head + body + "</tbody></table>"
@@ -1625,7 +1687,7 @@ def export_csv():
         SELECT order_code, office, order_date, name, phone_raw, option_code, price_eur,
                soup, zakuska, hot, dessert,
                drink_label, drink_price_eur,
-               bread, comment, status, created_at
+               bread, comment, status
         FROM orders
         WHERE office=? AND order_date=? AND status='active'
         ORDER BY created_at ASC
@@ -1636,14 +1698,19 @@ def export_csv():
 
     def esc(s):
         s = "" if s is None else str(s)
+        # убираем EN и сокращаем блюда в CSV тоже
+        s = _short_name(s) if " / " in s else s
         s = s.replace('"', '""')
         return f'"{s}"'
 
-    header = "код,офис,дата,имя,телефон,опция,итого_евро,суп,закуска,горячее,десерт,напиток,цена_напитка_евро,хлеб,комментарий,статус,создан"
+    # Excel ES: разделитель ; + BOM
+    header = "код;офис;дата;имя;телефон;опция;итого_евро;суп;закуска;горячее;десерт;напиток;цена_напитка_евро;хлеб;комментарий;статус"
     lines = [header]
+
     for r in rows:
+        drink_ru = _ru_only(r["drink_label"]) if r["drink_label"] else ""
         lines.append(
-            ",".join(
+            ";".join(
                 [
                     esc(r["order_code"]),
                     esc(r["office"]),
@@ -1656,20 +1723,20 @@ def export_csv():
                     esc(r["zakuska"]),
                     esc(r["hot"]),
                     esc(r["dessert"]),
-                    esc(r["drink_label"]),
+                    esc(drink_ru),
                     esc(r["drink_price_eur"]),
                     esc(r["bread"]),
                     esc(r["comment"]),
                     esc(r["status"]),
-                    esc(r["created_at"]),
                 ]
             )
         )
-    csv_data = "\n".join(lines) + "\n"
+
+    csv_data = "\ufeff" + "\n".join(lines) + "\n"  # BOM
 
     return Response(
         csv_data,
-        mimetype="text/csv",
+        mimetype="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="orders_{office}_{d.isoformat()}.csv"'},
     )
 
@@ -1677,6 +1744,7 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
