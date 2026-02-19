@@ -24,7 +24,7 @@ OFFICES = ["ALAMEDA", "MUSICA"]
 MENU = {
     "zakuska": [
         "Оливье / Olivier salad",
-        "Винегрет / Vinaigrette beet salad",
+        "Винегрет / Vinigret",
         "Икра из баклажанов / Eggplant caviar",
         "Паштет из куриной печени / Chicken liver pâté",
         "Шуба / Herring under a fur coat",
@@ -35,7 +35,7 @@ MENU = {
         "Куриный с домашней лапшой и яйцом / Chicken soup with noodles & egg",
     ],
     "hot": [
-        "Куриные котлеты с пюре / Chicken cutlets with mash",
+        "Куриные котлеты с пюре / Chicken cutlets with mash potato",
         "Куриные котлеты с гречкой / Chicken cutlets with buckwheat",
         "Вареники с картошкой / Potato vareniki",
         "Пельмени со сметаной / Pelmeni with sour cream",
@@ -57,12 +57,12 @@ BREAD_OPTIONS = ["Белый / White", "Чёрный / Black"]
 # Твои цены: морс 4, вода 2.2, чай 3.5, квас 3.5
 DRINKS = [
     ("", "— без напитка / no drink —", 0.0),
-    ("kvass", "Квас / Kvass", 3.5),
-    ("mors", "Морс / Berry drink (Mors)", 4.0),
-    ("water", "Вода / Water", 2.2),
-    ("tea_black", "Чай чёрный с чабрецом (сашет) / Black tea with thyme (sachet)", 3.5),
-    ("tea_green", "Чай зелёный (сашет) / Green tea (sachet)", 3.5),
-    ("tea_herbal", "Чай травяной (сашет) / Herbal tea (sachet)", 3.5),
+    ("kvas", "Квас / Kvas €3.5", 3.5),
+    ("mors", "Морс / Berry drink (Mors) €4.0", 4.0),
+    ("water", "Вода / Water €2.2", 2.2),
+    ("tea_black", "Чай чёрный с чабрецом (сашет) / Black tea with thyme (sachet) €3.5", 3.5),
+    ("tea_green", "Чай зелёный (сашет) / Green tea (sachet) €3.5", 3.5),
+    ("tea_herbal", "Чай травяной (сашет) / Herbal tea (sachet) €3.5", 3.5),
 ]
 DRINK_PRICE = {k: p for (k, _, p) in DRINKS}
 DRINK_LABEL = {k: lbl for (k, lbl, _) in DRINKS}
@@ -2131,6 +2131,7 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
