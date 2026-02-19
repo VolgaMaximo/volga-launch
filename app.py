@@ -863,7 +863,148 @@ __BODY__
   });
 })();
 </script>
+<style>
+/* === VOLGA POPUP === */
+#volgaPopupOverlay{
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,0.35);
+  display:none;
+  align-items:center;
+  justify-content:center;
+  z-index:9999;
+}
 
+#volgaPopup{
+  background:var(--volga-red);
+  color:var(--volga-bg);
+  border:3px solid var(--volga-blue);
+  padding:20px 24px;
+  max-width:420px;
+  width:90%;
+  text-align:center;
+  font-weight:800;
+  line-height:1.4;
+}
+
+#volgaPopup button{
+  margin-top:14px;
+  padding:8px 18px;
+  border:2px solid var(--volga-bg);
+  background:var(--volga-blue);
+  color:var(--volga-bg);
+  font-weight:800;
+  cursor:pointer;
+}
+</style>
+
+<div id="volgaPopupOverlay">
+  <div id="volgaPopup">
+    <div id="volgaPopupText"></div>
+    <button onclick="hideVolgaPopup()">OK</button>
+  </div>
+</div>
+
+<script>
+/* ====== POPUP CONTROL ====== */
+function showVolgaPopup(text){
+  document.getElementById("volgaPopupText").innerHTML = text;
+  document.getElementById("volgaPopupOverlay").style.display = "flex";
+}
+
+function hideVolgaPopup(){
+  document.getElementById("volgaPopupOverlay").style.display = "none";
+}
+
+/* ====== DATE VALIDATION ====== */
+(() => {
+
+  const dateInput = document.getElementById("order_date");
+  if (!dateInput) return;
+
+  const CUT_OFF_HOUR = 11;
+
+  function pad(n){ return String(n).padStart(2,"0"); }
+  function ymd(d){
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  }
+
+  function isAllowedDay(d){
+    return d.getDay() >= 2 && d.getDay() <= 5; // Tue–Fri only
+  }
+
+  function validateOrderDate(selectedYMD){
+
+    if (!selectedYMD) return true;
+
+    const now = new Date();
+    const [Y,M,D] = selectedYMD.split("-").map(Number);
+    const sel = new Date(Y, M-1, D);
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    if (sel < today){
+      showVolgaPopup(
+        "Нельзя выбрать прошедшую дату.<br><br>" +
+        "You can’t choose a past date."
+      );
+      return false;
+    }
+
+    if (!isAllowedDay(sel)){
+      showVolgaPopup(
+        "Мы работаем только вторник–пятница.<br><br>" +
+        "We operate Tuesday–Friday only."
+      );
+      return false;
+    }
+
+    if (sel.getTime() === today.getTime()){
+      const hh = now.getHours();
+      const mm = now.getMinutes();
+
+      if (hh > CUT_OFF_HOUR || (hh === CUT_OFF_HOUR && mm > 0)){
+        showVolgaPopup(
+          "Заказ на текущий день принимаем до 11:00.<br>" +
+          "После 11:00 — только на завтра.<br><br>" +
+          "Same-day orders are accepted until 11:00.<br>" +
+          "After 11:00 — for tomorrow only."
+        );
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  function resetToNextAllowedDay(){
+    const now = new Date();
+    const next = new Date(now.getFullYear(), now.getMonth(), now.getDate()+1);
+
+    while(!isAllowedDay(next)){
+      next.setDate(next.getDate()+1);
+    }
+
+    dateInput.value = ymd(next);
+  }
+
+  dateInput.addEventListener("change", () => {
+    if(!validateOrderDate(dateInput.value)){
+      resetToNextAllowedDay();
+    }
+  });
+
+  const form = dateInput.closest("form");
+  if(form){
+    form.addEventListener("submit", (e)=>{
+      if(!validateOrderDate(dateInput.value)){
+        e.preventDefault();
+        resetToNextAllowedDay();
+      }
+    });
+  }
+
+})();
+</script>
 
 </body>
 </html>"""
@@ -2210,6 +2351,7 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
