@@ -946,6 +946,83 @@ def form():
       <label>Комментарий / Notes</label>
       <textarea name="comment" rows="3" placeholder=""></textarea>
     </div>
+<script>
+(function () {
+  const MAX_DISHES = 3;
+
+  // поля, которые считаем "блюдами"
+  const dishIds = ["zakuska", "soup", "hot", "dessert"];
+
+  const form = document.querySelector('form[action="/order"]');
+  if (!form) return;
+
+  const selects = dishIds
+    .map(id => document.getElementById(id))
+    .filter(Boolean);
+
+  // --- простой попап (без библиотек) ---
+  function showPopup(msg) {
+    let el = document.getElementById("volgaPopup");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "volgaPopup";
+      el.style.position = "fixed";
+      el.style.left = "50%";
+      el.style.top = "20px";
+      el.style.transform = "translateX(-50%)";
+      el.style.zIndex = "9999";
+      el.style.padding = "12px 14px";
+      el.style.border = "2px solid var(--volga-blue)";
+      el.style.background = "var(--volga-bg)";
+      el.style.color = "var(--volga-blue)";
+      el.style.fontWeight = "800";
+      el.style.maxWidth = "92vw";
+      el.style.textAlign = "center";
+      document.body.appendChild(el);
+    }
+    el.textContent = msg;
+    el.style.display = "block";
+    clearTimeout(el._t);
+    el._t = setTimeout(() => { el.style.display = "none"; }, 2200);
+  }
+
+  function countSelected() {
+    let c = 0;
+    for (const s of selects) {
+      if (s.value && s.value.trim() !== "") c++;
+    }
+    return c;
+  }
+
+  // хранить предыдущее значение, чтобы откатывать
+  for (const s of selects) {
+    s.dataset.prev = s.value || "";
+    s.addEventListener("focus", () => {
+      s.dataset.prev = s.value || "";
+    });
+    s.addEventListener("change", () => {
+      const c = countSelected();
+      if (c > MAX_DISHES) {
+        // откат
+        s.value = s.dataset.prev || "";
+        showPopup(`Можно выбрать максимум ${MAX_DISHES} блюда. Четвёртое не добавляем.`);
+      } else {
+        // обновляем prev
+        s.dataset.prev = s.value || "";
+      }
+    });
+  }
+
+  // блокируем отправку формы, если всё же получилось >3
+  form.addEventListener("submit", (e) => {
+    const c = countSelected();
+    if (c > MAX_DISHES) {
+      e.preventDefault();
+      showPopup(`Ошибка: выбрано ${c} блюда. Нужно максимум ${MAX_DISHES}.`);
+    }
+  });
+})();
+</script>
 
 
  <button type="submit" class="btn-confirm" style="margin-top:22px;">
@@ -2131,6 +2208,7 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
