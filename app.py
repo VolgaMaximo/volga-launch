@@ -1634,11 +1634,14 @@ def admin():
         <button class="btn-primary" type="submit">Показать</button>
       </form>
 
-      <p style="margin-top:14px;">
-        <a href="/export.csv?office={office}&date={d.isoformat()}&token={ADMIN_TOKEN}">⬇️ Выгрузка CSV (активные)</a>
-        &nbsp;|&nbsp;
-        <a href="/admin/special?office={office}&date={d.isoformat()}&token={ADMIN_TOKEN}">⭐ Блюдо недели</a>
-      </p>
+     <p style="margin-top:14px;">
+  <a href="/export.csv?office={office}&date={d.isoformat()}&token={ADMIN_TOKEN}">⬇️ Выгрузка CSV (активные)</a>
+  &nbsp;|&nbsp;
+  <a href="/admin/summary?office={office}&date={d.isoformat()}&token={ADMIN_TOKEN}">🧾 Сводка (печать)</a>
+  &nbsp;|&nbsp;
+  <a href="/admin/special?office={office}&date={d.isoformat()}&token={ADMIN_TOKEN}">⭐ Блюдо недели</a>
+</p>
+
 
       {special_block}
 
@@ -1995,6 +1998,7 @@ def admin_summary_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
