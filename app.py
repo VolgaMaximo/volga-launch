@@ -885,8 +885,8 @@ document.addEventListener("click", (e)=>{
       if (c > MAX_DISHES) {
         s.value = s.dataset.prev || "";
         showVolgaPopup(
-          `МОЖНО ВЫБРАТЬ МАКСИМУМ ${MAX_DISHES} БЛЮДА.<br>` +
-          `YOU CAN SELECT MAXIMUM ${MAX_DISHES} DISHES.`
+          `Можно выбрать максимум ${MAX_DISHES} блюда.<br>` +
+          `You can select maximum ${MAX_DISHES} dishes.`
         );
       } else {
         s.dataset.prev = s.value || "";
@@ -2356,6 +2356,7 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
