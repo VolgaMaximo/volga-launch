@@ -786,85 +786,8 @@ __BODY__
 })();
 </script>
 
-<script>
-(function () {
-  const MAX_DISHES = 3;
-
-  // поля, которые считаем "блюдами"
-  const dishIds = ["zakuska", "soup", "hot", "dessert"];
-
-  const form = document.querySelector('form[action="/order"]');
-  if (!form) return;
-
-  const selects = dishIds
-    .map(id => document.getElementById(id))
-    .filter(Boolean);
-
-  // --- простой попап (без библиотек) ---
-  function showPopup(msg) {
-    let el = document.getElementById("volgaPopup");
-    if (!el) {
-      el = document.createElement("div");
-      el.id = "volgaPopup";
-      el.style.position = "fixed";
-      el.style.left = "50%";
-      el.style.top = "20px";
-      el.style.transform = "translateX(-50%)";
-      el.style.zIndex = "9999";
-      el.style.padding = "12px 14px";
-      el.style.border = "2px solid var(--volga-blue)";
-      el.style.background = "var(--volga-bg)";
-      el.style.color = "var(--volga-blue)";
-      el.style.fontWeight = "800";
-      el.style.maxWidth = "92vw";
-      el.style.textAlign = "center";
-      document.body.appendChild(el);
-    }
-    el.textContent = msg;
-    el.style.display = "block";
-    clearTimeout(el._t);
-    el._t = setTimeout(() => { el.style.display = "none"; }, 2200);
-  }
-
-  function countSelected() {
-    let c = 0;
-    for (const s of selects) {
-      if (s.value && s.value.trim() !== "") c++;
-    }
-    return c;
-  }
-
-  // хранить предыдущее значение, чтобы откатывать
-  for (const s of selects) {
-    s.dataset.prev = s.value || "";
-    s.addEventListener("focus", () => {
-      s.dataset.prev = s.value || "";
-    });
-    s.addEventListener("change", () => {
-      const c = countSelected();
-      if (c > MAX_DISHES) {
-        // откат
-        s.value = s.dataset.prev || "";
-        showPopup(`МОЖНО ВЫБРАТЬ МАКСИМУМ ${MAX_DISHES} БЛЮДА. / YOU CAN SELECT MAXIMUM ${MAX_DISHES} DISHES. `);
-      } else {
-        // обновляем prev
-        s.dataset.prev = s.value || "";
-      }
-    });
-  }
-
-  // блокируем отправку формы, если всё же получилось >3
-  form.addEventListener("submit", (e) => {
-    const c = countSelected();
-    if (c > MAX_DISHES) {
-      e.preventDefault();
-      showPopup(`Ошибка: выбрано ${c} БЛЮДА. НУЖНО МАКСИМУМ ${MAX_DISHES}. / ERROR: ${c} DISHES SELECTED. MAXIMUM ALLOWED IS ${MAX_DISHES}.`);
-    }
-  });
-})();
-</script>
 <style>
-/* === VOLGA POPUP === */
+/* === VOLGA POPUP (единый для всего) === */
 #volgaPopupOverlay{
   position:fixed;
   inset:0;
@@ -875,7 +798,7 @@ __BODY__
   z-index:9999;
 }
 
-#volgaPopup{
+#volgaPopupBox{
   background:var(--volga-blue);
   color:var(--volga-bg);
   border:3px solid var(--volga-blue);
@@ -887,7 +810,7 @@ __BODY__
   line-height:1.4;
 }
 
-#volgaPopup button{
+#volgaPopupBox button{
   margin-top:14px;
   padding:8px 18px;
   border:2px solid var(--volga-bg);
@@ -899,106 +822,188 @@ __BODY__
 </style>
 
 <div id="volgaPopupOverlay">
-  <div id="volgaPopup">
+  <div id="volgaPopupBox">
     <div id="volgaPopupText"></div>
-    <button onclick="hideVolgaPopup()">OK</button>
+    <button type="button" onclick="hideVolgaPopup()">OK</button>
   </div>
 </div>
 
 <script>
-/* ====== POPUP CONTROL ====== */
+/* ====== POPUP CONTROL (единый) ====== */
 function showVolgaPopup(text){
-  document.getElementById("volgaPopupText").innerHTML = text;
-  document.getElementById("volgaPopupOverlay").style.display = "flex";
+  const t = document.getElementById("volgaPopupText");
+  const o = document.getElementById("volgaPopupOverlay");
+  if (!t || !o) return;
+  t.innerHTML = text;
+  o.style.display = "flex";
 }
-
 function hideVolgaPopup(){
-  document.getElementById("volgaPopupOverlay").style.display = "none";
+  const o = document.getElementById("volgaPopupOverlay");
+  if (!o) return;
+  o.style.display = "none";
 }
 
-/* ====== DATE VALIDATION ====== */
-(() => {
+/* закрытие по клику на фон */
+document.addEventListener("click", (e)=>{
+  const o = document.getElementById("volgaPopupOverlay");
+  if (!o) return;
+  if (e.target === o) hideVolgaPopup();
+});
+</script>
 
+<script>
+/* ====== DISH LIMIT (макс 3 блюда) ====== */
+(function () {
+  const MAX_DISHES = 3;
+  const dishIds = ["zakuska", "soup", "hot", "dessert"];
+
+  const form = document.querySelector('form[action="/order"]') || document.querySelector("form");
+  if (!form) return;
+
+  const selects = dishIds
+    .map(id => document.getElementById(id))
+    .filter(Boolean);
+
+  function countSelected() {
+    let c = 0;
+    for (const s of selects) {
+      if (s.value && s.value.trim() !== "") c++;
+    }
+    return c;
+  }
+
+  for (const s of selects) {
+    s.dataset.prev = s.value || "";
+
+    s.addEventListener("focus", () => {
+      s.dataset.prev = s.value || "";
+    });
+
+    s.addEventListener("change", () => {
+      const c = countSelected();
+
+      if (c > MAX_DISHES) {
+        s.value = s.dataset.prev || "";
+        showVolgaPopup(
+          `МОЖНО ВЫБРАТЬ МАКСИМУМ ${MAX_DISHES} БЛЮДА.<br>` +
+          `YOU CAN SELECT MAXIMUM ${MAX_DISHES} DISHES.`
+        );
+      } else {
+        s.dataset.prev = s.value || "";
+      }
+    });
+  }
+
+  form.addEventListener("submit", (e) => {
+    const c = countSelected();
+    if (c > MAX_DISHES) {
+      e.preventDefault();
+      showVolgaPopup(
+        `ОШИБКА: ВЫБРАНО ${c} БЛЮДА. МАКСИМУМ — ${MAX_DISHES}.<br><br>` +
+        `ERROR: ${c} DISHES SELECTED. MAXIMUM ALLOWED IS ${MAX_DISHES}.`
+      );
+    }
+  });
+})();
+</script>
+
+<script>
+/* ====== DATE VALIDATION (Tue–Fri, и правило 11:00) ====== */
+(() => {
   const dateInput = document.getElementById("order_date");
   if (!dateInput) return;
 
+  const form = dateInput.closest("form") || document.querySelector("form");
   const CUT_OFF_HOUR = 11;
 
   function pad(n){ return String(n).padStart(2,"0"); }
-  function ymd(d){
-    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
-  }
+  function ymd(d){ return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
 
   function isAllowedDay(d){
     return d.getDay() >= 2 && d.getDay() <= 5; // Tue–Fri only
   }
 
-  function validateOrderDate(selectedYMD){
+  function todayDate(now){
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  }
 
+  function isAfterCutoff(now){
+    const hh = now.getHours();
+    const mm = now.getMinutes();
+    return (hh > CUT_OFF_HOUR) || (hh === CUT_OFF_HOUR && mm > 0);
+  }
+
+  function nextAllowedFrom(d){
+    const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    x.setDate(x.getDate()+1);
+    while(!isAllowedDay(x)) x.setDate(x.getDate()+1);
+    return x;
+  }
+
+  function allowedDateYMD(){
+    const now = new Date();
+    const today = todayDate(now);
+
+    // До 11:00 можно на сегодня (если это рабочий день),
+    // иначе — только на следующий разрешённый день.
+    if (!isAfterCutoff(now) && isAllowedDay(today)) {
+      return ymd(today);
+    }
+    return ymd(nextAllowedFrom(today));
+  }
+
+  function validateOrderDate(selectedYMD){
     if (!selectedYMD) return true;
 
     const now = new Date();
     const [Y,M,D] = selectedYMD.split("-").map(Number);
     const sel = new Date(Y, M-1, D);
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const today = todayDate(now);
 
+    // запрет прошлых дат
     if (sel < today){
-      showVolgaPopup(
-        "Нельзя выбрать прошедшую дату.<br><br>" +
-        "You can’t choose a past date."
-      );
+      showVolgaPopup("Нельзя выбрать прошедшую дату.<br><br>You can’t choose a past date.");
       return false;
     }
 
+    // работаем только Tue–Fri
     if (!isAllowedDay(sel)){
-      showVolgaPopup(
-        "Мы работаем только вторник–пятница.<br><br>" +
-        "We operate Tuesday–Friday only."
-      );
+      showVolgaPopup("Мы работаем только вторник–пятница.<br><br>We operate Tuesday–Friday only.");
       return false;
     }
 
-    if (sel.getTime() === today.getTime()){
-      const hh = now.getHours();
-      const mm = now.getMinutes();
-
-      if (hh > CUT_OFF_HOUR || (hh === CUT_OFF_HOUR && mm > 0)){
-        showVolgaPopup(
-          "Заказ на текущий день принимаем до 11:00.<br>" +
-          "После 11:00 — только на завтра.<br><br>" +
-          "Same-day orders are accepted until 11:00.<br>" +
-          "After 11:00 — for tomorrow only."
-        );
-        return false;
-      }
+    // главное правило: только строго разрешённая дата (сегодня до 11, иначе завтра)
+    const mustBe = allowedDateYMD();
+    if (selectedYMD !== mustBe){
+      showVolgaPopup(
+        "Дата заказа выбрана неверно.<br>" +
+        "До 11:00 можно заказать на сегодня.<br>" +
+        "После 11:00 — только на следующий рабочий день.<br><br>" +
+        "Wrong order date.<br>" +
+        "Before 11:00 you can order for today.<br>" +
+        "After 11:00 — only for the next working day."
+      );
+      return false;
     }
 
     return true;
   }
 
-  function resetToNextAllowedDay(){
-    const now = new Date();
-    const next = new Date(now.getFullYear(), now.getMonth(), now.getDate()+1);
-
-    while(!isAllowedDay(next)){
-      next.setDate(next.getDate()+1);
-    }
-
-    dateInput.value = ymd(next);
+  function resetToAllowed(){
+    dateInput.value = allowedDateYMD();
   }
 
   dateInput.addEventListener("change", () => {
     if(!validateOrderDate(dateInput.value)){
-      resetToNextAllowedDay();
+      resetToAllowed();
     }
   });
 
-  const form = dateInput.closest("form");
   if(form){
     form.addEventListener("submit", (e)=>{
       if(!validateOrderDate(dateInput.value)){
         e.preventDefault();
-        resetToNextAllowedDay();
+        resetToAllowed();
       }
     });
   }
@@ -2351,6 +2356,7 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
