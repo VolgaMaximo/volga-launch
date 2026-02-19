@@ -1634,13 +1634,27 @@ def admin():
         <button class="btn-primary" type="submit">Показать</button>
       </form>
 
-     <p style="margin-top:14px;">
-  <a href="/export.csv?office={office}&date={d.isoformat()}&token={ADMIN_TOKEN}">⬇️ Выгрузка CSV (активные)</a>
+   <p style="margin-top:14px;">
+  <a href="/export.csv?office={office}&date={d.isoformat()}&token={ADMIN_TOKEN}">
+    ⬇️ Выгрузка CSV (активные)
+  </a>
   &nbsp;|&nbsp;
-  <a href="/admin/summary?office={office}&date={d.isoformat()}&token={ADMIN_TOKEN}">🧾 Сводка (печать)</a>
+
+  <a href="/admin/print?office={office}&date={d.isoformat()}&token={ADMIN_TOKEN}">
+    🖨 Печать активных
+  </a>
   &nbsp;|&nbsp;
-  <a href="/admin/special?office={office}&date={d.isoformat()}&token={ADMIN_TOKEN}">⭐ Блюдо недели</a>
+
+  <a href="/admin/summary?office={office}&date={d.isoformat()}&token={ADMIN_TOKEN}">
+    🧾 Сводка (печать)
+  </a>
+  &nbsp;|&nbsp;
+
+  <a href="/admin/special?office={office}&date={d.isoformat()}&token={ADMIN_TOKEN}">
+    ⭐ Блюдо недели
+  </a>
 </p>
+
 
 
       {special_block}
@@ -1994,10 +2008,63 @@ def admin_summary_csv():
         mimetype="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="summary_{office}_{d.isoformat()}.csv"'},
     )
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+@app.get("/admin/print")
+def admin_print_active():
+    if not check_admin():
+        return html_page("<h2>⛔ Нет доступа</h2><p>Нужен token.</p>"), 403
+
+    office = request.args.get("office", OFFICES[0])
+    if office not in OFFICES:
+        office = OFFICES[0]
+
+    d_str = request.args.get("date", date.today().isoformat())
+    try:
+        d = date.fromisoformat(d_str)
+    except ValueError:
+        d = date.today()
+
+    conn = db()
+    ensure_columns(conn)
+    active_rows = conn.execute(
+        """
+        SELECT * FROM orders
+        WHERE office=? AND order_date=? AND status='active'
+        ORDER BY created_at ASC
+        """,
+        (office, d.isoformat()),
+    ).fetchall()
+    conn.close()
+
+    body = f"""
+    <h1 style="text-align:center;">Печать — активные заказы</h1>
+    <p style="text-align:center; font-weight:800;">
+      Офис: {office} | Дата: {d.isoformat()}
+    </p>
+
+    <div class="card">
+      {_rows_table(active_rows)}
+      <div style="margin-top:14px;">
+        <button class="btn-primary" onclick="window.print()">🖨 Печать</button>
+        <a class="btn-danger" href="/admin?office={office}&date={d.isoformat()}&token={ADMIN_TOKEN}">← Назад</a>
+      </div>
+    </div>
+
+    <style>
+      @media print{
+        body{ margin:0; }
+        .card{ border:0; margin:0; padding:0; }
+        button, a{ display:none !important; }
+      }
+    </style>
+    """
+    return html_page(body)
 
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
