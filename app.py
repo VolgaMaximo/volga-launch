@@ -845,7 +845,7 @@ __BODY__
       if (c > MAX_DISHES) {
         // откат
         s.value = s.dataset.prev || "";
-        showPopup(`Можно выбрать максимум ${MAX_DISHES} блюда. Четвёртое не добавляем.`);
+        showPopup(`МОЖНО ВЫБРАТЬ МАКСИМУМ ТРИ ${MAX_DISHES} БЛЮДА.`);
       } else {
         // обновляем prev
         s.dataset.prev = s.value || "";
@@ -2210,6 +2210,7 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
