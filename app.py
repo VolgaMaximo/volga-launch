@@ -1558,17 +1558,51 @@ ADMIN_SUMMARY_CSS = """
 ADMIN_PRINT_CSS = """
 <style>
   @media print{
-    /* фон -> белый, без заливок */
-    *{ -webkit-print-color-adjust: economy; print-color-adjust: economy; }
-    body{ margin:0; background:#fff !important; }
-    .card{ border:0; margin:0; padding:0; background:#fff !important; }
 
-    table, th, td{ background:#fff !important; }
-    .admin-table th{ background:#fff !important; } /* если вдруг было иначе */
+    /* полностью белая печать */
+    body{
+      margin:0;
+      background:#fff !important;
+    }
 
-    /* прячем кнопки/ссылки */
-    button, a, .no-print{ display:none !important; }
+    .card{
+      border:0 !important;
+      margin:0;
+      padding:0;
+      background:#fff !important;
+    }
+
+    table, th, td{
+      background:#fff !important;
+    }
+
+    .admin-table th{
+      background:#fff !important;
+    }
+
+    /* эконом режим цвета */
+    *{
+      -webkit-print-color-adjust: economy;
+      print-color-adjust: economy;
+    }
+
+    /* компактнее для кухни */
+    body{ font-size:11px; }
+    .admin-table{ font-size:10px; }
+    .admin-table th,
+    .admin-table td{
+      padding:4px 6px;
+    }
+
+    /* скрыть кнопки */
+    .no-print,
+    button,
+    a{
+      display:none !important;
+    }
   }
+</style>
+
 
   @media print{
     /* более компактно */
@@ -2097,6 +2131,7 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
