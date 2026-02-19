@@ -968,7 +968,7 @@ document.addEventListener("click", (e)=>{
 
     // работаем только Tue–Fri
     if (!isAllowedDay(sel)){
-      showVolgaPopup("Мы работаем только вторник–пятница.<br><br>We operate Tuesday–Friday only.");
+      showVolgaPopup("Заказ доступен вторник–пятница.<br><br>Order available Tuesday–Friday.");
       return false;
     }
 
@@ -2356,6 +2356,7 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
