@@ -845,7 +845,7 @@ __BODY__
       if (c > MAX_DISHES) {
         // откат
         s.value = s.dataset.prev || "";
-        showPopup(`МОЖНО ВЫБРАТЬ МАКСИМУМ ТРИ ${MAX_DISHES} БЛЮДА.`);
+        showPopup(`МОЖНО ВЫБРАТЬ МАКСИМУМ ${MAX_DISHES} БЛЮДА. / YOU CAN SELECT MAXIMUM ${MAX_DISHES} dishes. `);
       } else {
         // обновляем prev
         s.dataset.prev = s.value || "";
@@ -858,7 +858,7 @@ __BODY__
     const c = countSelected();
     if (c > MAX_DISHES) {
       e.preventDefault();
-      showPopup(`Ошибка: выбрано ${c} блюда. Нужно максимум ${MAX_DISHES}.`);
+      showPopup(`Ошибка: выбрано ${c} БЛЮДА. НУЖНО МАКСИМУМ ${MAX_DISHES}. / ERROR: ${c} DISHES SELECTED. MAXIMUM ALLOWED IS ${MAX_DISHES}.`);
     }
   });
 })();
@@ -2210,6 +2210,7 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
