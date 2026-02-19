@@ -1601,10 +1601,7 @@ ADMIN_PRINT_CSS = """
       display:none !important;
     }
   }
-</style>
-
-
-  @media print{
+@media print{
     /* более компактно */
     body{ font-size:11px; }
     .admin-table{ font-size:10px; }
@@ -1617,8 +1614,11 @@ ADMIN_PRINT_CSS = """
       word-break:break-word;
     }
   
-  
 </style>
+
+  
+  
+
 """
 
 
@@ -2131,6 +2131,7 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
