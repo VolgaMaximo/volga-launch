@@ -24,27 +24,27 @@ OFFICES = ["ALAMEDA", "MUSICA"]
 MENU = {
     "zakuska": [
         "Оливье / Olivier salad",
-        "Винегрет / Vinigret",
+        "Винегрет / Vinigret salad",
         "Икра из баклажанов / Eggplant caviar",
         "Паштет из куриной печени / Chicken liver pâté",
         "Шуба / Herring under a fur coat",
     ],
     "soup": [
         "Борщ / Borscht",
-        "Солянка сборная мясная / Meat solyanka",
-        "Куриный с домашней лапшой и яйцом / Chicken soup with noodles & egg",
+        "Солянка сборная мясная / Meat soup solyanka",
+        "Куриный суп с лапшой и яйцом / Chicken soup with noodles & egg",
     ],
     "hot": [
-        "Куриные котлеты с пюре / Chicken cutlets with mash potato",
+        "Куриные котлеты с пюре / Chicken cutlets with mashed potatoes",
         "Куриные котлеты с гречкой / Chicken cutlets with buckwheat",
-        "Вареники с картошкой / Potato vareniki",
+        "Вареники с картошкой / Vareniki with potatoes",
         "Пельмени со сметаной / Pelmeni with sour cream",
         "Плов с бараниной / Lamb plov (+3€)",
     ],
     "dessert": [
         "Торт Наполеон / Napoleon cake",
-        "Пирожное Картошка / Chocolate “Kartoshka” cake",
-        "Трубочка со сгущенкой / Puff pastry roll with condensed milk",
+        "Пирожное Картошка / Kartoshka cake",
+        "Трубочка со сгущенкой / Wafer roll with dulce de leche",
     ],
 }
 
@@ -885,8 +885,8 @@ document.addEventListener("click", (e)=>{
       if (c > MAX_DISHES) {
         s.value = s.dataset.prev || "";
         showVolgaPopup(
-          `Можно выбрать максимум ${MAX_DISHES} блюда.<br>` +
-          `You can select maximum ${MAX_DISHES} dishes.`
+          `Можно выбрать максимум ${MAX_DISHES} блюда. Любая опция включает суп. <br>` +
+          `You can select maximum ${MAX_DISHES} dishes. All options come with soup.`
         );
       } else {
         s.dataset.prev = s.value || "";
@@ -2356,6 +2356,7 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
