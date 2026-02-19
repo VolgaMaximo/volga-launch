@@ -39,7 +39,7 @@ MENU = {
         "Куриные котлеты с гречкой / Chicken cutlets with buckwheat",
         "Вареники с картошкой / Potato vareniki",
         "Пельмени со сметаной / Pelmeni with sour cream",
-        "Плов с бараниной (+3€) / Lamb plov (+3€)",
+        "Плов с бараниной / Lamb plov (+3€)",
     ],
     "dessert": [
         "Торт Наполеон / Napoleon cake",
@@ -845,7 +845,7 @@ __BODY__
       if (c > MAX_DISHES) {
         // откат
         s.value = s.dataset.prev || "";
-        showPopup(`МОЖНО ВЫБРАТЬ МАКСИМУМ ${MAX_DISHES} БЛЮДА. / YOU CAN SELECT MAXIMUM ${MAX_DISHES} dishes. `);
+        showPopup(`МОЖНО ВЫБРАТЬ МАКСИМУМ ${MAX_DISHES} БЛЮДА. / YOU CAN SELECT MAXIMUM ${MAX_DISHES} DISHES. `);
       } else {
         // обновляем prev
         s.dataset.prev = s.value || "";
@@ -2210,6 +2210,7 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
