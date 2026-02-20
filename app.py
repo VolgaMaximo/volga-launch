@@ -1505,7 +1505,7 @@ def edit_get():
         """
         return html_page(body)
 
-body = f"""
+    body = f"""
 <h1>Изменить / отменить заказ<br><small>Edit / cancel order</small></h1>
 
 <div class="card volga-card">
@@ -1535,7 +1535,7 @@ body = f"""
   <p><a class="volga-link" href="/">← На главную / Home</a></p>
 </div>
 """
-return html_page(body)
+    return html_page(body)
 
 
 @app.post("/edit")
@@ -2413,6 +2413,7 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
