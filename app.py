@@ -1422,11 +1422,11 @@ def edit_get():
               </div>
             </div>
 
-            <label>Напиток (оплачивается отдельно) / Drink (paid separately)</label>
+            <label>Напиток / Drink </label>
             <select name="drink">{drink_options}</select>
-            <small>Не входит в стоимость опции / Not included in option price</small>
+            <small>оплачивается отдельно / not included</small>
 
-            <label style="margin-top:16px;">Хлеб (бесплатно) / Bread (free)</label>
+            <label style="margin-top:16px;">Хлеб / Bread </label>
             <select name="bread">
               <option value="" {"selected" if not found["bread"] else ""}>— без хлеба / no bread —</option>
               {options_html(BREAD_OPTIONS)}
@@ -2356,6 +2356,7 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
