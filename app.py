@@ -962,7 +962,6 @@ document.addEventListener("click", (e)=>{
 
 <script>
 /* ====== DATE VALIDATION (Tue–Fri, и правило 11:00) ====== */
-<script>
 (() => {
   const dateInput = document.getElementById("order_date");
   if (!dateInput) return;
@@ -988,7 +987,6 @@ document.addEventListener("click", (e)=>{
   }
 
   function nextAllowedFrom(day0){
-    // day0 — дата (без времени). Берём следующий календарный день и двигаемся до разрешённого дня
     const x = new Date(day0.getFullYear(), day0.getMonth(), day0.getDate());
     x.setDate(x.getDate() + 1);
     while(!isAllowedDay(x)) x.setDate(x.getDate() + 1);
@@ -999,12 +997,10 @@ document.addEventListener("click", (e)=>{
     const now = new Date();
     const today = startOfDay(now);
 
-    // До 11:00 — можно на сегодня, но только если сегодня разрешённый день
     if (!isAfterCutoff(now) && isAllowedDay(today)) {
       return ymd(today);
     }
 
-    // После 11:00 (или если сегодня не рабочий день) — только на следующий рабочий день
     return ymd(nextAllowedFrom(today));
   }
 
@@ -1062,19 +1058,6 @@ document.addEventListener("click", (e)=>{
   }
 })();
 </script>
-  if(form){
-    form.addEventListener("submit", (e)=>{
-      if(!validateOrderDate(dateInput.value)){
-        e.preventDefault();
-        resetToAllowed();
-      }
-    });
-  }
-
-})();
-</script>
-
-</body>
 </html>"""
     return shell.replace("__BODY__", body)
 
@@ -2423,6 +2406,7 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
