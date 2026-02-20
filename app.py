@@ -962,11 +962,12 @@ document.addEventListener("click", (e)=>{
 
 <script>
 /* ====== DATE VALIDATION (Tue–Fri, и правило 11:00) ====== */
+<script>
 (() => {
   const dateInput = document.getElementById("order_date");
   if (!dateInput) return;
 
-  const form = dateInput.closest("form") || document.querySelector("form");
+  const form = dateInput.closest("form");
   const CUT_OFF_HOUR = 11;
 
   function pad(n){ return String(n).padStart(2,"0"); }
@@ -976,8 +977,8 @@ document.addEventListener("click", (e)=>{
     return d.getDay() >= 2 && d.getDay() <= 5; // Tue–Fri only
   }
 
-  function todayDate(now){
-    return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  function startOfDay(d){
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate());
   }
 
   function isAfterCutoff(now){
@@ -986,22 +987,24 @@ document.addEventListener("click", (e)=>{
     return (hh > CUT_OFF_HOUR) || (hh === CUT_OFF_HOUR && mm > 0);
   }
 
-  function nextAllowedFrom(d){
-    const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-    x.setDate(x.getDate()+1);
-    while(!isAllowedDay(x)) x.setDate(x.getDate()+1);
+  function nextAllowedFrom(day0){
+    // day0 — дата (без времени). Берём следующий календарный день и двигаемся до разрешённого дня
+    const x = new Date(day0.getFullYear(), day0.getMonth(), day0.getDate());
+    x.setDate(x.getDate() + 1);
+    while(!isAllowedDay(x)) x.setDate(x.getDate() + 1);
     return x;
   }
 
   function allowedDateYMD(){
     const now = new Date();
-    const today = todayDate(now);
+    const today = startOfDay(now);
 
-    // До 11:00 можно на сегодня (если это рабочий день),
-    // иначе — только на следующий разрешённый день.
+    // До 11:00 — можно на сегодня, но только если сегодня разрешённый день
     if (!isAfterCutoff(now) && isAllowedDay(today)) {
       return ymd(today);
     }
+
+    // После 11:00 (или если сегодня не рабочий день) — только на следующий рабочий день
     return ymd(nextAllowedFrom(today));
   }
 
@@ -1011,21 +1014,18 @@ document.addEventListener("click", (e)=>{
     const now = new Date();
     const [Y,M,D] = selectedYMD.split("-").map(Number);
     const sel = new Date(Y, M-1, D);
-    const today = todayDate(now);
+    const today = startOfDay(now);
 
-    // запрет прошлых дат
-    if (sel < today){
-      showVolgaPopup("Нельзя выбрать прошедшую дату.<br><br>You can’t choose a past date.");
+    if (startOfDay(sel) < today){
+      showVolgaPopup("Вы выбрали прошедшую дату.<br><br>You can’t choose a past date.");
       return false;
     }
 
-    // работаем только Tue–Fri
     if (!isAllowedDay(sel)){
-      showVolgaPopup("Заказ доступен вторник–пятница.<br><br>Order available Tuesday–Friday.");
+      showVolgaPopup("Заказ доступен вторник–пятница.<br><br>Order available Tuesday–Friday only.");
       return false;
     }
 
-    // главное правило: только строго разрешённая дата (сегодня до 11, иначе завтра)
     const mustBe = allowedDateYMD();
     if (selectedYMD !== mustBe){
       showVolgaPopup(
@@ -1052,6 +1052,16 @@ document.addEventListener("click", (e)=>{
     }
   });
 
+  if(form){
+    form.addEventListener("submit", (e)=>{
+      if(!validateOrderDate(dateInput.value)){
+        e.preventDefault();
+        resetToAllowed();
+      }
+    });
+  }
+})();
+</script>
   if(form){
     form.addEventListener("submit", (e)=>{
       if(!validateOrderDate(dateInput.value)){
@@ -2413,6 +2423,7 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
