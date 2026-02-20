@@ -160,18 +160,47 @@ def cutoff_dt(d: date) -> datetime:
     return datetime.combine(d, time(CUTOFF_HOUR, 0), TZ)
 
 
+def is_workday(d: date) -> bool:
+    # Доставка/заказы доступны Tue–Fri
+    return d.weekday() in (1, 2, 3, 4)  # Tue=1 ... Fri=4
+
+
+def next_workday(d: date) -> date:
+    x = d + timedelta(days=1)
+    while not is_workday(x):
+        x += timedelta(days=1)
+    return x
+
+
+def prev_workday(d: date) -> date:
+    x = d - timedelta(days=1)
+    while not is_workday(x):
+        x -= timedelta(days=1)
+    return x
+
+
 def ordering_window_for(d: date):
-    start = cutoff_dt(d - timedelta(days=1))
+    """
+    Окно приёма заказов на дату d:
+    start = cutoff(предыдущий рабочий день)
+    end   = cutoff(d)
+    Пример: на вторник окно начинается в пятницу 11:00 (если Sat/Sun/Mon нерабочие)
+    """
+    start = cutoff_dt(prev_workday(d))
     end = cutoff_dt(d)
     return start, end
 
 
 def is_closed_day(d: date) -> bool:
-    # Monday closed
-    return d.weekday() == 0
+    # Закрыто: Mon, Sat, Sun (работаем Tue–Fri)
+    return not is_workday(d)
 
 
 def validate_order_time(d: date):
+    """
+    Проверка: выбранная дата должна быть рабочей (Tue–Fri)
+    и текущее время должно попадать в окно приёма заказов для этой даты.
+    """
     n = now_local()
     start, end = ordering_window_for(d)
     if is_closed_day(d):
@@ -179,21 +208,17 @@ def validate_order_time(d: date):
     return (start <= n < end), start, end, n
 
 
-def normalize_phone(raw: str) -> str:
-    raw = (raw or "").strip()
-    if not raw:
-        return ""
-    has_plus = raw.lstrip().startswith("+")
-    digits = re.sub(r"\D+", "", raw)
-    if not digits:
-        return ""
-    return ("+" if has_plus else "") + digits
-
-
 def compute_default_date():
+    """
+    Дата по умолчанию в форме:
+    - если сегодня рабочий день и сейчас до 11:00 -> сегодня
+    - иначе -> следующий рабочий день
+    """
     n = now_local()
     today = n.date()
-    return today if n < cutoff_dt(today) else (today + timedelta(days=1))
+    if is_workday(today) and n < cutoff_dt(today):
+        return today
+    return next_workday(today)
 
 
 def check_admin():
@@ -2406,6 +2431,7 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
