@@ -207,6 +207,15 @@ def validate_order_time(d: date):
         return False, start, end, n
     return (start <= n < end), start, end, n
 
+def normalize_phone(raw: str) -> str:
+    raw = (raw or "").strip()
+    if not raw:
+        return ""
+    has_plus = raw.lstrip().startswith("+")
+    digits = re.sub(r"\D+", "", raw)
+    if not digits:
+        return ""
+    return ("+" if has_plus else "") + digits
 
 def compute_default_date():
     """
@@ -2431,6 +2440,7 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
