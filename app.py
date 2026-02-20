@@ -819,6 +819,59 @@ __BODY__
   font-weight:800;
   cursor:pointer;
 }
+
+/* ===== VOLGA UI: controls + buttons ===== */
+
+.volga-control{
+  width:100%;
+  padding:12px 12px;
+  border:2px solid var(--volga-blue);
+  background:var(--volga-bg);
+  color:#111;
+  font-weight:800;
+  letter-spacing:0.02em;
+  outline:none;
+  border-radius:0;
+}
+
+.volga-control:focus{
+  box-shadow:0 0 0 3px rgba(30,76,255,0.25);
+}
+
+.volga-btn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  padding:12px 16px;
+  border:2px solid var(--volga-blue);
+  font-weight:900;
+  letter-spacing:0.04em;
+  text-transform:uppercase;
+  cursor:pointer;
+  border-radius:0;
+}
+
+.volga-btn--primary{
+  background:var(--volga-blue);
+  color:var(--volga-bg);
+}
+
+.volga-btn--primary:hover{ filter:brightness(0.95); }
+.volga-btn:active{ transform:translateY(1px); }
+
+.volga-mt-30{ margin-top:30px; }
+
+.volga-link{
+  color:var(--volga-blue);
+  font-weight:800;
+  text-decoration:none;
+  border-bottom:2px solid rgba(30,76,255,0.35);
+}
+.volga-link:hover{
+  border-bottom-color:var(--volga-blue);
+}
+
+
 </style>
 
 <div id="volgaPopupOverlay">
@@ -1452,33 +1505,37 @@ def edit_get():
         """
         return html_page(body)
 
-    body = f"""
-    <h1>Изменить / отменить заказ<br><small>Edit / cancel order</small></h1>
-    <div class="card">
-      <form method="get" action="/edit">
-        <div class="row">
-          <div>
-            <label>Офис / Office</label>
-            <select name="office" required>{office_opts}</select>
-          </div>
-          <div>
-            <label>Дата доставки / Delivery date</label>
-            <input type="date" name="date" value="{d.isoformat()}" required>
-          </div>
-        </div>
+body = f"""
+<h1>Изменить / отменить заказ<br><small>Edit / cancel order</small></h1>
 
-        <label>Телефон (как в заказе) / Phone (as in order)</label>
-        <input name="phone" value="{phone_raw}" placeholder="+34..." required>
-
-        <button type="submit" style="margin-top:30px;">Найти заказ / Find order</button>
-      </form>
-
-      <p class="muted">Если заказ не найден — проверь офис, дату и телефон.<br>
-      <small>If not found — check office, date and phone.</small></p>
-      <p><a href="/">← На главную / Home</a></p>
+<div class="card volga-card">
+  <form method="get" action="/edit" class="volga-form">
+    <div class="row">
+      <div>
+        <label>Офис / Office</label>
+        <select class="volga-control" name="office" required>{office_opts}</select>
+      </div>
+      <div>
+        <label>Дата доставки / Delivery date</label>
+        <input class="volga-control" type="date" name="date" value="{d.isoformat()}" required>
+      </div>
     </div>
-    """
-    return html_page(body)
+
+    <label>Телефон (как в заказе) / Phone (as in order)</label>
+    <input class="volga-control" name="phone" value="{phone_raw}" placeholder="" required>
+
+    <button type="submit" class="volga-btn volga-btn--primary volga-mt-30">
+      Найти заказ / Find order
+    </button>
+  </form>
+
+  <p class="muted">Если заказ не найден — проверь офис, дату и телефон.<br>
+  <small>If not found — check office, date and phone.</small></p>
+
+  <p><a class="volga-link" href="/">← На главную / Home</a></p>
+</div>
+"""
+return html_page(body)
 
 
 @app.post("/edit")
@@ -2356,6 +2413,7 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
