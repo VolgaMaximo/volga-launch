@@ -867,7 +867,7 @@ __BODY__
   color:var(--volga-blue);        /* ← как на основной */
   border:2px solid var(--volga-blue);
   border-radius:0;
-  font-weight:800;
+  font-weight:400;
   letter-spacing:1px;             /* ← если хочешь прям как заголовки */
 }
 
@@ -2443,6 +2443,7 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
