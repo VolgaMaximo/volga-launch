@@ -858,14 +858,17 @@ __BODY__
 
 .volga-control{
   width:100%;
-  padding:12px 12px;
-  border:2px solid var(--volga-blue);
+  max-width:520px;
+  padding:12px;
+  margin-top:0px;
+  font-size:16px;
+  font-family:inherit;            /* ← как на основной */
   background:var(--volga-bg);
-  color:#111;
-  font-weight:800;
-  letter-spacing:0.02em;
-  outline:none;
+  color:var(--volga-blue);        /* ← как на основной */
+  border:2px solid var(--volga-blue);
   border-radius:0;
+  font-weight:800;
+  letter-spacing:1px;             /* ← если хочешь прям как заголовки */
 }
 
 .volga-control:focus{
@@ -2440,6 +2443,7 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
