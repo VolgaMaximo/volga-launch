@@ -788,7 +788,42 @@ document.addEventListener("click", (e)=>{
   if (e.target === o) hideVolgaPopup();
 });
 </script>
+<script>
+/* ====== FLOOR CHECK FIXED (NO SENDING FREEZE) ====== */
+(() => {
+  const form = document.querySelector('form[action="/order"]');
+  const officeEl = document.getElementById("office");
+  const floorEl = document.getElementById("floor");
+  const floorCell = document.getElementById("floorCell");
 
+  if (!form || !officeEl || !floorEl || !floorCell) return;
+  if (typeof showVolgaPopup !== "function") return;
+
+  function isAlameda(){
+    return (officeEl.value || "").trim() === "ALAMEDA";
+  }
+
+  function showFloorError(){
+    floorCell.style.display = "block";
+    showVolgaPopup(
+      "Пожалуйста, выберите этаж для ALAMEDA.<br><br>" +
+      "Please choose a floor for ALAMEDA."
+    );
+    floorEl.scrollIntoView({ behavior: "smooth", block: "center" });
+    setTimeout(() => floorEl.focus(), 150);
+  }
+
+  // ВАЖНО: третий параметр true — это фикс зависания
+  form.addEventListener("submit", (e) => {
+    if (isAlameda() && (!floorEl.value || floorEl.value.trim() === "")) {
+      e.preventDefault();
+      e.stopImmediatePropagation(); // не даем кнопке стать "Sending..."
+      showFloorError();
+    }
+  }, true);
+
+})();
+</script>
 <script>
 /* ====== DISH LIMIT (макс 3 блюда) ====== */
 (function () {
@@ -963,36 +998,7 @@ document.addEventListener("click", (e)=>{
 })();
 </script>
 
-<script>
-/* ====== FLOOR CHECK (VOLGA popup + focus) ====== */
-(() => {
-  const form = document.querySelector('form[action="/order"]');
-  const officeEl = document.getElementById("office");
-  const floorEl = document.getElementById("floor");
-  const floorCell = document.getElementById("floorCell");
 
-  if (!form || !officeEl || !floorEl || !floorCell) return;
-
-  form.addEventListener("submit", (e) => {
-    const isAlameda = (officeEl.value || "").trim() === "ALAMEDA";
-
-    if (isAlameda && (!floorEl.value || floorEl.value.trim() === "")) {
-      e.preventDefault();
-
-      // если вдруг скрыто — покажем
-      floorCell.style.display = "block";
-
-      showVolgaPopup(
-        "Пожалуйста, выберите этаж для ALAMEDA.<br><br>" +
-        "Please choose a floor for ALAMEDA."
-      );
-
-      floorEl.scrollIntoView({ behavior: "smooth", block: "center" });
-      setTimeout(() => floorEl.focus(), 150);
-    }
-  });
-})();
-</script>
 
 </html>"""
     return shell.replace("__BODY__", body)
@@ -2342,6 +2348,7 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
