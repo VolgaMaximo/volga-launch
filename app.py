@@ -1058,11 +1058,11 @@ def form():
 
       <div id="floorCell" style="display:none;">
         <label>Этаж / Floor</label>
-        <select id="floor" name="floor">
-          <option value="">— Выбери этаж / choose floor —</option>
-          <option value="1 этаж / 1st floor">1 этаж / 1st floor</option>
-          <option value="6 этаж / 6th floor">6 этаж / 6th floor</option>
-        </select>
+       <select id="floor" name="floor">
+  <option value="">— выбери этаж / choose floor —</option>
+  <option value="1st floor">1 этаж / 1st floor</option>
+  <option value="6th floor">6 этаж / 6th floor</option>
+</select>
       </div>
     </div>
 
@@ -2311,6 +2311,7 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
