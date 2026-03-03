@@ -825,6 +825,84 @@ document.addEventListener("click", (e)=>{
 })();
 </script>
 <script>
+/* ====== DISH RULES CHECK (popup instead of server error) ====== */
+(() => {
+  const form = document.querySelector('form[action="/order"]');
+  if (!form) return;
+  if (typeof showVolgaPopup !== "function") return;
+
+  const z = document.getElementById("zakuska");
+  const s = document.getElementById("soup");
+  const h = document.getElementById("hot");
+  const d = document.getElementById("dessert");
+
+  if (!z || !s || !h || !d) return;
+
+  function has(el){
+    return !!(el.value && el.value.trim() !== "");
+  }
+
+  function focusEl(el){
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    setTimeout(() => el.focus(), 150);
+  }
+
+  // Capture=true — чтобы сработать ДО anti-double-submit (и не было "Sending...")
+  form.addEventListener("submit", (e) => {
+    const hasZ = has(z);
+    const hasS = has(s);
+    const hasH = has(h);
+    const hasD = has(d);
+
+    const count = (hasZ?1:0) + (hasS?1:0) + (hasH?1:0) + (hasD?1:0);
+
+    // 1) Суп обязателен
+    if (!hasS){
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      showVolgaPopup(
+        "Любая опция включает суп. Выберите пожалуйста суп.<br><br>" +
+        "All options come with soup. Please choose a soup."
+      );
+      focusEl(s);
+      return;
+    }
+
+    // 2) Ровно 3 блюда (суп + ещё 2)
+    if (count !== 3){
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      showVolgaPopup(
+        "Нужно выбрать 3 блюда. Любая опция включает суп.<br><br>" +
+        "Please select 3 dishes. All options come with soup."
+      );
+      // подсказка куда смотреть
+      if (!hasZ) focusEl(z);
+      else if (!hasH) focusEl(h);
+      else if (!hasD) focusEl(d);
+      return;
+    }
+
+    // 3) Проверка корректной комбинации (opt1/opt2/opt3)
+    const isOpt1 = hasZ && hasS && hasD && !hasH; // zak + soup + dessert
+    const isOpt2 = !hasZ && hasS && hasH && hasD; // soup + hot + dessert
+    const isOpt3 = hasZ && hasS && hasH && !hasD; // zak + soup + hot
+
+    if (!(isOpt1 || isOpt2 || isOpt3)){
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      showVolgaPopup(
+        "Комбинация выбрана неверно.<br>" +
+        "Выберите одну из опций (3 блюда).<br><br>" +
+        "Wrong combination. Please follow the options (3 dishes)."
+      );
+      focusEl(h); // обычно ошибка здесь, но можно и на баннер прокрутить
+      return;
+    }
+  }, true);
+})();
+</script>
+<script>
 /* ====== DISH LIMIT (макс 3 блюда) ====== */
 (function () {
   const MAX_DISHES = 3;
@@ -2348,6 +2426,7 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
