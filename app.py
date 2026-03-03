@@ -3,7 +3,7 @@ import re
 import sqlite3
 from datetime import datetime, date, time, timedelta
 from zoneinfo import ZoneInfo
-from flask import Flask, request, Response, redirect, send_file, abort
+from flask import Flask, request, Response, redirect, send_file
 
 # ---------------------------
 # Config
@@ -19,6 +19,14 @@ CUTOFF_HOUR = int(os.getenv("CUTOFF_HOUR", "11"))  # 11:00
 ORDER_PREFIX = os.getenv("ORDER_PREFIX", "VO")
 
 OFFICES = ["ALAMEDA", "MUSICA"]
+
+# ✅ временно отключаем офис для новых заказов
+INACTIVE_OFFICES = {"MUSICA"}
+
+# ✅ этажи по офисам
+FLOORS_BY_OFFICE = {
+    "ALAMEDA": ["1st floor", "6th floor"]
+}
 
 # --- Меню: RU / EN ---
 MENU = {
@@ -54,7 +62,6 @@ PLOV_SURCHARGE = 3.0
 BREAD_OPTIONS = ["Белый / White", "Чёрный / Black"]
 
 # --- Напитки (дополнительно) ---
-# Твои цены: морс 4, вода 2.2, чай 3.5, квас 3.5
 DRINKS = [
     ("", "— без напитка / no drink —", 0.0),
     ("kvas", "Квас / Kvas €3.5", 3.5),
@@ -87,6 +94,9 @@ def ensure_columns(conn: sqlite3.Connection):
         conn.execute("ALTER TABLE orders ADD COLUMN drink_label TEXT")
     if "drink_price_eur" not in cols:
         conn.execute("ALTER TABLE orders ADD COLUMN drink_price_eur REAL")
+    # ✅ NEW
+    if "floor" not in cols:
+        conn.execute("ALTER TABLE orders ADD COLUMN floor TEXT")
 
 
 def init_db():
@@ -98,6 +108,8 @@ def init_db():
             order_code TEXT NOT NULL UNIQUE,
             office TEXT NOT NULL,
             order_date TEXT NOT NULL,
+
+            floor TEXT,
 
             name TEXT NOT NULL,
             phone_raw TEXT NOT NULL,
@@ -184,7 +196,6 @@ def ordering_window_for(d: date):
     Окно приёма заказов на дату d:
     start = cutoff(предыдущий рабочий день)
     end   = cutoff(d)
-    Пример: на вторник окно начинается в пятницу 11:00 (если Sat/Sun/Mon нерабочие)
     """
     start = cutoff_dt(prev_workday(d))
     end = cutoff_dt(d)
@@ -192,20 +203,16 @@ def ordering_window_for(d: date):
 
 
 def is_closed_day(d: date) -> bool:
-    # Закрыто: Mon, Sat, Sun (работаем Tue–Fri)
     return not is_workday(d)
 
 
 def validate_order_time(d: date):
-    """
-    Проверка: выбранная дата должна быть рабочей (Tue–Fri)
-    и текущее время должно попадать в окно приёма заказов для этой даты.
-    """
     n = now_local()
     start, end = ordering_window_for(d)
     if is_closed_day(d):
         return False, start, end, n
     return (start <= n < end), start, end, n
+
 
 def normalize_phone(raw: str) -> str:
     raw = (raw or "").strip()
@@ -217,12 +224,8 @@ def normalize_phone(raw: str) -> str:
         return ""
     return ("+" if has_plus else "") + digits
 
+
 def compute_default_date():
-    """
-    Дата по умолчанию в форме:
-    - если сегодня рабочий день и сейчас до 11:00 -> сегодня
-    - иначе -> следующий рабочий день
-    """
     n = now_local()
     today = n.date()
     if is_workday(today) and n < cutoff_dt(today):
@@ -331,6 +334,18 @@ def file_path(name: str) -> str:
     return os.path.join(os.path.dirname(__file__), name)
 
 
+def validate_floor_for_office(office: str, floor: str | None) -> tuple[bool, str | None]:
+    """
+    Возвращает (ok, normalized_floor)
+    """
+    if office in FLOORS_BY_OFFICE:
+        allowed = set(FLOORS_BY_OFFICE[office])
+        if floor not in allowed:
+            return False, None
+        return True, floor
+    return True, None
+
+
 # ---------------------------
 # PWA minimal
 # ---------------------------
@@ -420,7 +435,6 @@ self.addEventListener('fetch', (e) => {{
     return Response(js, mimetype="application/javascript")
 
 
-
 # ---------------------------
 # HTML shell
 # ---------------------------
@@ -465,11 +479,9 @@ body{
 h1{
   color:var(--volga-blue);
   font-weight:800;
-    letter-spacing:1px;
+  letter-spacing:1px;
   margin:0 0 14px 0;
-      line-height:1.0;
-
-
+  line-height:1.0;
 }
 h1 small{
   display:block;
@@ -477,7 +489,6 @@ h1 small{
   font-weight:800;
   line-height:1.00;
   margin-top:4px;
-    
 }
 
 .hero-title{
@@ -488,29 +499,22 @@ h1 small{
   letter-spacing:1px;
   margin-bottom:14px;
 }
-
-.hero-title .ru{
-  color: var(--volga-blue);
-}
-
-.hero-title .en{
-  color: var(--volga-red);
-}
-
+.hero-title .ru{ color: var(--volga-blue); }
+.hero-title .en{ color: var(--volga-red); }
 
 label{
   display:block;
-  margin-top:0px;
+  margin:0 0 4px 0;
   font-weight:800;
   overflow-wrap:anywhere;
-  color:var(--volga-red); /* <-- заголовки полей КРАСНЫЕ (как ты просил) */
+  color:var(--volga-red);
 }
 
 input, select, textarea{
   width:100%;
   max-width:520px;
   padding:12px;
-  margin-top:0px;
+  margin:0;
   font-size:16px;
   background:var(--volga-bg);
   color:var(--volga-blue);
@@ -526,12 +530,11 @@ input:focus, select:focus, textarea:focus{
 .row{
   display:grid;
   grid-template-columns:minmax(0,1fr) minmax(0,1fr);
-  column-gap:18px;   /* горизонталь */
-  row-gap:16px;      /* вертикаль */
+  column-gap:18px;
+  row-gap:10px;
   align-items:start;
+  margin-top:10px;
 }
-
-
 .row > div{
   width:100%;
   max-width:520px;
@@ -539,7 +542,12 @@ input:focus, select:focus, textarea:focus{
 
 .muted{ color:var(--volga-burgundy); }
 .danger{ color:var(--volga-red); font-weight:800; }
-small{ color:var(--volga-burgundy); }
+small{
+  display:block;
+  margin:2px 0 0 0;
+  line-height:1.1;
+  color:var(--volga-burgundy);
+}
 
 a{ color:var(--volga-blue); text-decoration:none; font-weight:700; }
 a:hover{ color:var(--volga-red); }
@@ -553,20 +561,14 @@ a:hover{ color:var(--volga-red); }
   color:var(--volga-blue);
 }
 
-/* Доставка RU синий жирный, EN красный (как ты хотел) */
 .lead{
   color:var(--volga-blue);
   text-align:center;
   font-weight:900;
   margin:12px 0 0 0;
 }
-.lead .en{
-  color:var(--volga-red);
-  text-align:center;
-  font-weight:800;
-}
+.lead .en{ color:var(--volga-red); font-weight:800; }
 
-/* Часы работы: RU синий, EN красный */
 .hours{
   margin:14px 0 0 0;
   text-align:center;
@@ -575,8 +577,6 @@ a:hover{ color:var(--volga-red); }
 .hours .ru{ color:var(--volga-blue); }
 .hours .en{ color:var(--volga-red); }
 
-/* кнопки */
-/* --- Основная кнопка (Confirm) --- */
 .btn-confirm{
   display:block;
   width:100%;
@@ -584,7 +584,6 @@ a:hover{ color:var(--volga-red); }
   padding:16px 24px;
   font-size:16px;
   font-weight:800;
-
   background:var(--volga-blue);
   color:var(--volga-bg);
   border:none;
@@ -592,14 +591,8 @@ a:hover{ color:var(--volga-red); }
   cursor:pointer;
   transition:0.2s ease;
 }
+.btn-confirm:active{ background:var(--volga-red); }
 
-/* при нажатии — красная */
-.btn-confirm:active{
-  background:var(--volga-red);
-}
-
-
-/* --- Вторая кнопка (Edit / Cancel) --- */
 .btn-edit{
   display:flex;
   text-align:center;
@@ -610,7 +603,6 @@ a:hover{ color:var(--volga-red); }
   padding:16px 24px;
   font-size:16px;
   font-weight:800;
-
   background:var(--volga-red);
   color:var(--volga-bg);
   border:none;
@@ -619,55 +611,37 @@ a:hover{ color:var(--volga-red); }
   transition:0.2s ease;
   margin-top:18px;
 }
+.btn-edit:active{ background:var(--volga-blue); }
 
-/* при нажатии — синяя */
-.btn-edit:active{
-  background:var(--volga-blue);
+.comment-block{ margin-top:18px; }
+
+.banner-block{
+  margin-top:18px;
+  margin-bottom:18px;
 }
-
-.comment-block{
-  margin-top:18px;   /* больше пространства перед комментариями */
-}
-
 
 @media (max-width: 700px){
   .card{ padding:20px; }
-  .row{ grid-template-columns:1fr; column-gap:0; row-gap:16px; }
+  .row{ grid-template-columns:1fr; column-gap:0; row-gap:10px; margin-top:10px; }
   .row > div{ max-width:none; }
   input, select, textarea{ max-width:100%; }
   h1{ letter-spacing:0.5px; }
 
-  /* чтобы рамка date не была “шире” и не сливалась с границей */
-  #order_date{
-    width:100%;
-    max-width:100%;
-    display:block;
-  }
-}
-/* ✅ Mobile fix: date input should not overflow and should not "merge" with card border */
-@media (max-width: 700px){
-
-  /* iOS/Safari часто делает date шире из-за системной кнопки/иконки */
   input[type="date"]{
     -webkit-appearance: none;
     appearance: none;
   }
-
-  /* конкретно наша дата */
   #order_date{
     width: 100%;
     max-width: 100%;
     min-width: 0;
     display: block;
-
-    /* маленький "внутренний отступ" от рамки карточки,
-       чтобы визуально не сливалось */
     margin-left: 2px;
     margin-right: 2px;
   }
 }
-/* --- ADMIN BUTTONS STYLE --- */
 
+/* --- ADMIN BUTTONS STYLE --- */
 .btn-primary{
   display:block;
   width:100%;
@@ -681,16 +655,8 @@ a:hover{ color:var(--volga-red); }
   border-radius:0;
   text-align:center;
 }
-
-.btn-primary:hover{
-  background:var(--volga-red);
-  border-color:var(--volga-red);
-}
-
-.btn-primary:active{
-  background:var(--volga-red);
-  border-color:var(--volga-red);
-}
+.btn-primary:hover{ background:var(--volga-red); border-color:var(--volga-red); }
+.btn-primary:active{ background:var(--volga-red); border-color:var(--volga-red); }
 
 .btn-danger{
   display:block;
@@ -705,16 +671,8 @@ a:hover{ color:var(--volga-red); }
   border-radius:0;
   text-align:center;
 }
-
-.btn-danger:hover{
-  background:var(--volga-blue);
-  border-color:var(--volga-blue);
-}
-
-.btn-danger:active{
-  background:var(--volga-blue);
-  border-color:var(--volga-blue);
-}
+.btn-danger:hover{ background:var(--volga-blue); border-color:var(--volga-blue); }
+.btn-danger:active{ background:var(--volga-blue); border-color:var(--volga-blue); }
 
 .admin-table{
   width:100%;
@@ -734,67 +692,16 @@ a:hover{ color:var(--volga-red); }
   text-align:left;
   font-weight:800;
 }
-.admin-table td small{
-  color:var(--volga-burgundy);
-}
+.admin-table td small{ color:var(--volga-burgundy); }
 .admin-table tbody tr:hover{
   outline:2px solid var(--volga-red);
   outline-offset:-2px;
 }
 @media (max-width: 700px){
   .admin-table{ font-size:13px; }
-  /* прячем “создан” на мобиле, чтобы не было каши */
   .admin-table th.created,
   .admin-table td.created{ display:none; }
 }
-
-/* === FORM SPACING (single source of truth) === */
-
-/* 1) Grid spacing inside .row */
-.row{
-  display:grid;
-  grid-template-columns:minmax(0,1fr) minmax(0,1fr);
-  column-gap:18px;
-  row-gap:10px;          /* ← твой целевой интервал */
-  align-items:start;
-  margin-top:10px;       /* ← одинаковый шаг между row-блоками */
-}
-
-/* mobile: one column, same rhythm */
-@media (max-width: 700px){
-  .row{
-    grid-template-columns:1fr;
-    column-gap:0;
-    row-gap:10px;
-    margin-top:10px;
-  }
-}
-
-/* 2) Label + field spacing */
-label{
-  display:block;
-  margin:0 0 4px 0;      /* ← label ближе к полю */
-}
-
-input, select, textarea{
-  margin:0;              /* ← убираем margin полностью */
-}
-
-/* 3) Small text close to the field */
-small{
-  display:block;
-  margin:2px 0 0 0;      /* ← прижали small вверх */
-  line-height:1.1;
-}
-
-/* 4) Banner spacing matches rows */
-.banner-block{
-  margin-top:18px;     /* больше сверху */
-  margin-bottom:18px;  /* больше снизу */
-}
-
-
-
 </style>
 </head>
 <body>
@@ -853,62 +760,6 @@ __BODY__
   font-weight:800;
   cursor:pointer;
 }
-
-/* ===== VOLGA UI: controls + buttons ===== */
-
-.volga-control{
-  width:100%;
-  max-width:520px;
-  padding:12px;
-  margin-top:0px;
-  font-size:16px;
-  font-family:inherit;            /* ← как на основной */
-  background:var(--volga-bg);
-  color:var(--volga-blue);        /* ← как на основной */
-  border:2px solid var(--volga-blue);
-  border-radius:0;
-  font-weight:400;
-  letter-spacing:1px;             /* ← если хочешь прям как заголовки */
-}
-
-.volga-control:focus{
-  box-shadow:0 0 0 3px rgba(30,76,255,0.25);
-}
-
-.volga-btn{
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  padding:12px 16px;
-  border:2px solid var(--volga-blue);
-  font-weight:900;
-  letter-spacing:0.04em;
-  text-transform:uppercase;
-  cursor:pointer;
-  border-radius:0;
-}
-
-.volga-btn--primary{
-  background:var(--volga-blue);
-  color:var(--volga-bg);
-}
-
-.volga-btn--primary:hover{ filter:brightness(0.95); }
-.volga-btn:active{ transform:translateY(1px); }
-
-.volga-mt-30{ margin-top:30px; }
-
-.volga-link{
-  color:var(--volga-blue);
-  font-weight:800;
-  text-decoration:none;
-  border-bottom:2px solid rgba(30,76,255,0.35);
-}
-.volga-link:hover{
-  border-bottom-color:var(--volga-blue);
-}
-
-
 </style>
 
 <div id="volgaPopupOverlay">
@@ -919,7 +770,6 @@ __BODY__
 </div>
 
 <script>
-/* ====== POPUP CONTROL (единый) ====== */
 function showVolgaPopup(text){
   const t = document.getElementById("volgaPopupText");
   const o = document.getElementById("volgaPopupOverlay");
@@ -932,8 +782,6 @@ function hideVolgaPopup(){
   if (!o) return;
   o.style.display = "none";
 }
-
-/* закрытие по клику на фон */
 document.addEventListener("click", (e)=>{
   const o = document.getElementById("volgaPopupOverlay");
   if (!o) return;
@@ -1037,7 +885,6 @@ document.addEventListener("click", (e)=>{
     if (!isAfterCutoff(now) && isAllowedDay(today)) {
       return ymd(today);
     }
-
     return ymd(nextAllowedFrom(today));
   }
 
@@ -1095,6 +942,27 @@ document.addEventListener("click", (e)=>{
   }
 })();
 </script>
+
+<script>
+/* ====== FLOOR (ALAMEDA only) ====== */
+(() => {
+  const officeEl = document.getElementById("office");
+  const floorRow = document.getElementById("floorRow");
+  const floorEl = document.getElementById("floor");
+  if (!officeEl || !floorRow || !floorEl) return;
+
+  function syncFloor(){
+    const isAlameda = officeEl.value === "ALAMEDA";
+    floorRow.style.display = isAlameda ? "grid" : "none";
+    floorEl.required = isAlameda;
+    if (!isAlameda) floorEl.value = "";
+  }
+
+  officeEl.addEventListener("change", syncFloor);
+  syncFloor();
+})();
+</script>
+
 </html>"""
     return shell.replace("__BODY__", body)
 
@@ -1108,6 +976,10 @@ def form():
 
     office = request.args.get("office", OFFICES[0])
     if office not in OFFICES:
+        office = OFFICES[0]
+
+    # ✅ если кто-то руками открыл MUSICA — на главной уводим на ALAMEDA
+    if office in INACTIVE_OFFICES:
         office = OFFICES[0]
 
     d_str = request.args.get("date", default_date.isoformat())
@@ -1141,7 +1013,16 @@ def form():
     if limit_reached:
         warn += "<p class='danger'><b>На выбранную дату заказы временно недоступны.</b><br><small>Orders are temporarily unavailable for this date.</small></p>"
 
-    office_opts = "".join([f"<option value='{o}' {'selected' if o==office else ''}>{o}</option>" for o in OFFICES])
+    # ✅ MUSICA disabled в выпадающем списке на главной
+    office_opts = "".join([
+        f"<option value='{o}' "
+        f"{'selected' if o==office else ''} "
+        f"{'disabled' if o in INACTIVE_OFFICES else ''}>"
+        f"{o}{' (temporarily unavailable)' if o in INACTIVE_OFFICES else ''}"
+        f"</option>"
+        for o in OFFICES
+    ])
+
     drink_options = "".join([f"<option value='{k}'>{lbl}</option>" for (k, lbl, _) in DRINKS])
 
     body = f"""
@@ -1149,13 +1030,10 @@ def form():
   <img src="/logo.png" alt="VOLGA" style="max-height:120px;">
 </div>
 
-
-
 <h1 class="hero-title">
   <span class="ru">БИЗНЕС-ЛАНЧ RingCentral</span><br>
   <span class="en">BUSINESS LUNCH RingCentral</span>
 </h1>
-
 
 <p class="lead">
   Доставка в 13:00. Заказ до 11:00.<br>
@@ -1182,6 +1060,19 @@ def form():
       </div>
     </div>
 
+    <!-- ✅ FLOOR: показываем только для ALAMEDA (JS) -->
+    <div class="row" id="floorRow" style="display:none;">
+      <div>
+        <label>Этаж (ALAMEDA) / Floor (ALAMEDA)</label>
+        <select id="floor" name="floor">
+          <option value="">— choose floor —</option>
+          <option value="1st floor">1st floor</option>
+          <option value="6th floor">6th floor</option>
+        </select>
+      </div>
+      <div></div>
+    </div>
+
     <div class="row">
       <div>
         <label>Как вас зовут / Your name</label>
@@ -1194,10 +1085,9 @@ def form():
       </div>
     </div>
 
-   <div class="banner-block">
-  <img src="/banner.png" alt="Options" style="width:100%; display:block; border:2px solid var(--volga-blue);">
-</div>
-
+    <div class="banner-block">
+      <img src="/banner.png" alt="Options" style="width:100%; display:block; border:2px solid var(--volga-blue);">
+    </div>
 
     <div class="row">
       <div>
@@ -1216,7 +1106,7 @@ def form():
       </div>
     </div>
 
-        <div class="row">
+    <div class="row">
       <div>
         <label>Горячее / Main</label>
         <select id="hot" name="hot">
@@ -1238,7 +1128,7 @@ def form():
       <div>
         <label>Напиток / Drink</label>
         <select id="drink" name="drink">{drink_options}</select>
-        <small>оплачивается отдельно / not included </small>
+        <small>оплачивается отдельно / not included</small>
       </div>
 
       <div>
@@ -1255,16 +1145,13 @@ def form():
       <textarea name="comment" rows="3" placeholder=""></textarea>
     </div>
 
-
- <button type="submit" class="btn-confirm" style="margin-top:22px;">
-  Подтвердить заказ / Confirm order
-</button>
-
+    <button type="submit" class="btn-confirm" style="margin-top:22px;">
+      Подтвердить заказ / Confirm order
+    </button>
 
     <a href="/edit" class="btn-edit">
-  Изменить или отменить заказ / Edit or cancel
-</a>
-
+      Изменить или отменить заказ / Edit or cancel
+    </a>
   </form>
 </div>
 """
@@ -1277,11 +1164,21 @@ def order():
     if office not in OFFICES:
         return html_page("<p class='danger'>Ошибка: неизвестный офис / Unknown office.</p><p><a href='/'>Назад / Back</a></p>"), 400
 
+    # ✅ запрет новых заказов в MUSICA
+    if office in INACTIVE_OFFICES:
+        return html_page("<p class='danger'>Этот офис временно недоступен / This office is temporarily unavailable.</p><p><a href='/'>Назад / Back</a></p>"), 403
+
     order_date = (request.form.get("order_date", "") or "").strip()
     try:
         d = date.fromisoformat(order_date)
     except ValueError:
         return html_page("<p class='danger'>Ошибка: неверная дата / Invalid date.</p><p><a href='/'>Назад / Back</a></p>"), 400
+
+    # ✅ этаж
+    floor = (request.form.get("floor", "") or "").strip() or None
+    ok_floor, floor = validate_floor_for_office(office, floor)
+    if not ok_floor:
+        return html_page("<p class='danger'>Выберите этаж (ALAMEDA) / Please choose floor (ALAMEDA).</p><p><a href='/'>Назад / Back</a></p>"), 400
 
     ok_time, start, end, now_ = validate_order_time(d)
     if not ok_time:
@@ -1358,16 +1255,17 @@ def order():
         conn.execute(
             """
             INSERT INTO orders(
-              order_code, office, order_date, name, phone_raw, phone_norm,
+              order_code, office, order_date, floor,
+              name, phone_raw, phone_norm,
               zakuska, soup, hot, dessert,
               drink_code, drink_label, drink_price_eur,
               bread,
               option_code, price_eur, comment, status, created_at
             )
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """,
             (
-                order_code, office, d.isoformat(),
+                order_code, office, d.isoformat(), floor,
                 name, phone_raw, phone_norm,
                 zakuska, soup, hot, dessert,
                 drink_code or None, drink_label, drink_price if drink_code else None,
@@ -1384,17 +1282,20 @@ def order():
     opt_human = {"opt1": "Опция 1 / Option 1", "opt2": "Опция 2 / Option 2", "opt3": "Опция 3 / Option 3"}[option_code]
     drink_line = f"{drink_label} (+{drink_price}€)" if drink_code else "—"
 
+    floor_line = f"{floor}" if floor else "—"
+
     return html_page(
         f"""
       <h2>✅ Заказ принят / Order confirmed</h2>
       <div class="card">
         <p><span class="pill"><b>{order_code}</b></span></p>
         <p><b>{name}</b> — {office} — <span class="muted">{phone_raw}</span></p>
+        <p>Этаж / Floor: <b>{floor_line}</b></p>
         <p>Дата доставки / Delivery date: <b>{d.isoformat()}</b> (13:00)</p>
         <p><span class="pill">{opt_human}</span><span class="pill">Итого / Total: {total_price}€</span></p>
         <ul>
-          <li>Закуска / Starter: {zakuska or "—"}</li>
           <li>Суп / Soup: {soup}</li>
+          <li>Закуска / Starter: {zakuska or "—"}</li>
           <li>Горячее / Main: {hot or "—"}</li>
           <li>Десерт / Dessert: {dessert or "—"}</li>
           <li>Напиток / Drink: {drink_line}</li>
@@ -1409,7 +1310,7 @@ def order():
 
 
 # ---------------------------
-# Edit / Cancel (оставляем как было в твоей версии)
+# Edit / Cancel
 # ---------------------------
 @app.get("/edit")
 def edit_get():
@@ -1439,6 +1340,8 @@ def edit_get():
     conn.close()
 
     ok_time, start, end, now_ = validate_order_time(d)
+
+    # в edit/admin офисы НЕ отключаем в селекте (чтобы смотреть старые заказы)
     office_opts = "".join([f"<option value='{o}' {'selected' if o==office else ''}>{o}</option>" for o in OFFICES])
 
     drink_options = ""
@@ -1450,6 +1353,23 @@ def edit_get():
 
     if found:
         hot_items = hot_menu_with_special(office, d)
+
+        floor_edit_block = ""
+        if office in FLOORS_BY_OFFICE:
+            fval = (found["floor"] or "")
+            floor_edit_block = f"""
+            <div class="row" style="margin-top:10px;">
+              <div>
+                <label>Этаж (ALAMEDA) / Floor</label>
+                <select name="floor" required>
+                  <option value="">— choose floor —</option>
+                  <option value="1st floor" {"selected" if fval=="1st floor" else ""}>1st floor</option>
+                  <option value="6th floor" {"selected" if fval=="6th floor" else ""}>6th floor</option>
+                </select>
+              </div>
+              <div></div>
+            </div>
+            """
 
         body = f"""
         <h1>Изменить / отменить заказ<br><small>Edit / cancel order</small></h1>
@@ -1470,6 +1390,8 @@ def edit_get():
 
             <label>Как вас зовут / Your name</label>
             <input name="name" value="{found['name']}" required>
+
+            {floor_edit_block}
 
             <div class="row">
               <div>
@@ -1519,7 +1441,6 @@ def edit_get():
             <textarea name="comment" rows="3">{found["comment"] or ""}</textarea>
 
             <button type="submit" class="btn-primary">Сохранить / Save</button>
-
           </form>
 
           <form method="post" action="/cancel" style="margin-top:12px;">
@@ -1527,7 +1448,6 @@ def edit_get():
             <input type="hidden" name="order_date" value="{d.isoformat()}">
             <input type="hidden" name="phone" value="{found['phone_raw']}">
             <button type="submit" class="btn-danger">Отменить заказ / Cancel</button>
-
           </form>
 
           <p style="margin-top:16px;"><a href="/">← На главную / Home</a></p>
@@ -1543,18 +1463,18 @@ def edit_get():
     <div class="row">
       <div>
         <label>Офис / Office</label>
-        <select class="volga-control" name="office" required>{office_opts}</select>
+        <select name="office" required>{office_opts}</select>
       </div>
       <div>
         <label>Дата доставки / Delivery date</label>
-        <input class="volga-control" type="date" name="date" value="{d.isoformat()}" required>
+        <input type="date" name="date" value="{d.isoformat()}" required>
       </div>
     </div>
 
     <label>Телефон (как в заказе) / Phone (as in order)</label>
-    <input class="volga-control" name="phone" value="{phone_raw}" placeholder="" required>
+    <input name="phone" value="{phone_raw}" placeholder="" required>
 
-    <button type="submit" class="volga-btn volga-btn--primary volga-mt-30">
+    <button type="submit" class="btn-primary">
       Найти заказ / Find order
     </button>
   </form>
@@ -1562,7 +1482,7 @@ def edit_get():
   <p class="muted">Если заказ не найден — проверь офис, дату и телефон.<br>
   <small>If not found — check office, date and phone.</small></p>
 
-  <p><a class="volga-link" href="/">← На главную / Home</a></p>
+  <p><a href="/">← На главную / Home</a></p>
 </div>
 """
     return html_page(body)
@@ -1601,6 +1521,12 @@ def edit_post():
     hot = (request.form.get("hot", "") or "").strip() or None
     dessert = (request.form.get("dessert", "") or "").strip() or None
 
+    # ✅ этаж (если нужен)
+    floor = (request.form.get("floor", "") or "").strip() or None
+    ok_floor, floor = validate_floor_for_office(office, floor)
+    if not ok_floor:
+        return html_page("<p class='danger'>Выберите этаж (ALAMEDA) / Please choose floor (ALAMEDA).</p><p><a href='/edit'>Назад / Back</a></p>"), 400
+
     drink_code = (request.form.get("drink", "") or "").strip()
     if drink_code not in DRINK_PRICE:
         drink_code = ""
@@ -1634,13 +1560,13 @@ def edit_post():
     conn.execute(
         """
         UPDATE orders
-        SET name=?, zakuska=?, soup=?, hot=?, dessert=?,
+        SET name=?, floor=?, zakuska=?, soup=?, hot=?, dessert=?,
             drink_code=?, drink_label=?, drink_price_eur=?,
             bread=?, option_code=?, price_eur=?, comment=?
         WHERE id=?
         """,
         (
-            name, zakuska, soup, hot, dessert,
+            name, floor, zakuska, soup, hot, dessert,
             drink_code or None, drink_label, drink_price if drink_code else None,
             bread, option_code, float(total_price), comment,
             existing["id"],
@@ -1651,6 +1577,7 @@ def edit_post():
 
     opt_human = {"opt1": "Опция 1 / Option 1", "opt2": "Опция 2 / Option 2", "opt3": "Опция 3 / Option 3"}[option_code]
     drink_line = f"{drink_label} (+{drink_price}€)" if drink_code else "—"
+    floor_line = floor or "—"
 
     return html_page(
         f"""
@@ -1658,11 +1585,12 @@ def edit_post():
       <div class="card">
         <p><span class="pill"><b>{existing['order_code']}</b></span></p>
         <p><b>{name}</b> — {office} — <span class="muted">{existing['phone_raw']}</span></p>
+        <p>Этаж / Floor: <b>{floor_line}</b></p>
         <p>Дата доставки / Delivery date: <b>{d.isoformat()}</b> (13:00)</p>
         <p><span class="pill">{opt_human}</span><span class="pill">Итого / Total: {total_price}€</span></p>
         <ul>
-          <li>Закуска / Starter: {zakuska or "—"}</li>
           <li>Суп / Soup: {soup}</li>
+          <li>Закуска / Starter: {zakuska or "—"}</li>
           <li>Горячее / Main: {hot or "—"}</li>
           <li>Десерт / Dessert: {dessert or "—"}</li>
           <li>Напиток / Drink: {drink_line}</li>
@@ -1673,7 +1601,6 @@ def edit_post():
       <p><a href="/">← На главную / Home</a></p>
     """
     )
-
 
 
 @app.post("/cancel")
@@ -1735,14 +1662,11 @@ def cancel_post():
 # ===========================
 # Admin (RU only) + Tables + Summary + CSV (semicolon + BOM) + Print
 # ===========================
-
 def _ru_only(s: str) -> str:
-    """Берём только часть до ' / ' (RU из 'RU / EN')."""
     s = "" if s is None else str(s)
     return s.split(" / ")[0].strip()
 
 
-# Сокращения блюд (можешь дополнять)
 SHORT = {
     "Оливье": "Оливье",
     "Винегрет": "Винегрет",
@@ -1770,7 +1694,6 @@ SHORT = {
 
 
 def _short_name(s: str) -> str:
-    """Сначала берём RU, потом пытаемся сократить."""
     ru = _ru_only(s)
     return SHORT.get(ru, ru)
 
@@ -1790,6 +1713,7 @@ def _rows_table(rows):
           <th>Код</th>
           <th>Имя</th>
           <th>Телефон</th>
+          <th>Этаж</th>
           <th>Итого</th>
           <th>Суп</th>
           <th>Закуска</th>
@@ -1803,7 +1727,7 @@ def _rows_table(rows):
       <tbody>
     """
     if not rows:
-        return head + "<tr><td colspan='11' class='muted'>—</td></tr></tbody></table>"
+        return head + "<tr><td colspan='12' class='muted'>—</td></tr></tbody></table>"
 
     body = ""
     for r in rows:
@@ -1820,6 +1744,7 @@ def _rows_table(rows):
           <td><b>{r['order_code']}</b></td>
           <td>{r['name']}</td>
           <td>{r['phone_raw']}</td>
+          <td>{r['floor'] or '—'}</td>
           <td><b>{_fmt_money(r['price_eur'])}</b></td>
           <td>{_short_name(r['soup']) if r['soup'] else '—'}</td>
           <td>{_short_name(r['zakuska']) if r['zakuska'] else '—'}</td>
@@ -1837,7 +1762,6 @@ def _summary_table(title: str, counts: dict) -> str:
     rows_html = ""
     for k, v in sorted(counts.items(), key=lambda x: (-x[1], x[0])):
         rows_html += f"<tr><td>{k}</td><td><b>{v}</b></td></tr>"
-
     if not rows_html:
         rows_html = "<tr><td colspan='2' class='muted'>—</td></tr>"
 
@@ -1854,7 +1778,6 @@ def _summary_table(title: str, counts: dict) -> str:
     """
 
 
-# CSS для печати — ВНЕ f-string, чтобы {} не ломали Python
 ADMIN_SUMMARY_CSS = """
 <style>
   @media print {
@@ -1866,74 +1789,26 @@ ADMIN_SUMMARY_CSS = """
 </style>
 """
 
-
 ADMIN_PRINT_CSS = """
 <style>
   @media print{
-
-    /* полностью белая печать */
-    body{
-      margin:0;
-      background:#fff !important;
-    }
-
-    .card{
-      border:0 !important;
-      margin:0;
-      padding:0;
-      background:#fff !important;
-    }
-
-    table, th, td{
-      background:#fff !important;
-    }
-
-    .admin-table th{
-      background:#fff !important;
-    }
-
-    /* эконом режим цвета */
-    *{
-      -webkit-print-color-adjust: economy;
-      print-color-adjust: economy;
-    }
-
-    /* компактнее для кухни */
-    body{ font-size:11px; }
-    .admin-table{ font-size:10px; }
-    .admin-table th,
-    .admin-table td{
-      padding:4px 6px;
-    }
-
-    /* скрыть кнопки */
-    .no-print,
-    button,
-    a{
-      display:none !important;
-    }
-  }
-@media print{
-    /* более компактно */
+    body{ margin:0; background:#fff !important; }
+    .card{ border:0 !important; margin:0; padding:0; background:#fff !important; }
+    table, th, td{ background:#fff !important; }
+    .admin-table th{ background:#fff !important; }
+    *{ -webkit-print-color-adjust: economy; print-color-adjust: economy; }
     body{ font-size:11px; }
     .admin-table{ font-size:10px; }
     .admin-table th, .admin-table td{ padding:4px 6px; }
-
-    /* чтобы длинные комментарии не раздували строки */
+    .no-print, button, a{ display:none !important; }
     .admin-table td:last-child{
       max-width:260px;
       white-space:normal;
       word-break:break-word;
     }
-  
+  }
 </style>
-
-  
-  
-
 """
-
-
 
 
 @app.get("/admin")
@@ -1993,9 +1868,7 @@ def admin():
     special = get_weekly_special(office, d)
     conn.close()
 
-    office_opts = "".join(
-        [f"<option value='{o}' {'selected' if o==office else ''}>{o}</option>" for o in OFFICES]
-    )
+    office_opts = "".join([f"<option value='{o}' {'selected' if o==office else ''}>{o}</option>" for o in OFFICES])
 
     special_block = "<p class='muted'>Блюдо недели: —</p>"
     if special:
@@ -2381,7 +2254,7 @@ def export_csv():
 
     rows = conn.execute(
         """
-        SELECT order_code, office, order_date, name, phone_raw, option_code, price_eur,
+        SELECT order_code, office, order_date, floor, name, phone_raw, option_code, price_eur,
                soup, zakuska, hot, dessert,
                drink_label, drink_price_eur,
                bread, comment, status
@@ -2395,11 +2268,11 @@ def export_csv():
 
     def esc(s):
         s = "" if s is None else str(s)
-        s = _short_name(s)  # RU+short
+        s = _short_name(s)
         s = s.replace('"', '""')
         return f'"{s}"'
 
-    header = "код;офис;дата;имя;телефон;опция;итого_евро;суп;закуска;горячее;десерт;напиток;цена_напитка_евро;хлеб;комментарий;статус"
+    header = "код;офис;дата;этаж;имя;телефон;опция;итого_евро;суп;закуска;горячее;десерт;напиток;цена_напитка_евро;хлеб;комментарий;статус"
     lines = [header]
 
     for r in rows:
@@ -2410,6 +2283,7 @@ def export_csv():
                     esc(r["order_code"]),
                     esc(r["office"]),
                     esc(r["order_date"]),
+                    esc(r["floor"] or ""),
                     esc(r["name"]),
                     esc(r["phone_raw"]),
                     esc(r["option_code"]),
@@ -2433,12 +2307,6 @@ def export_csv():
         mimetype="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="orders_{office}_{d.isoformat()}.csv"'},
     )
-
-
-# ⚠️ ЭТОТ БЛОК ДОЛЖЕН БЫТЬ В САМОМ КОНЦЕ app.py (после всех @app.get/@app.post)
-# if __name__ == "__main__":
-#     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
-
 
 
 if __name__ == "__main__":
