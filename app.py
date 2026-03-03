@@ -1775,12 +1775,12 @@ def cancel_post():
 
 
 # ===========================
-# Admin (RU only) + Tables + Summary + CSV (semicolon + BOM) + Print
+# Admin v2 (Grouped by Floor) + Special management + CSV + Print
 # ===========================
+
 def _ru_only(s: str) -> str:
     s = "" if s is None else str(s)
     return s.split(" / ")[0].strip()
-
 
 SHORT = {
     "Оливье": "Оливье",
@@ -1791,7 +1791,7 @@ SHORT = {
 
     "Борщ": "Борщ",
     "Солянка сборная мясная": "Солянка",
-    "Куриный с домашней лапшой и яйцом": "Кур. суп",
+    "Куриный суп с лапшой и яйцом": "Кур. суп",
 
     "Куриные котлеты с пюре": "Котл+пюре",
     "Куриные котлеты с гречкой": "Котл+греча",
@@ -1807,11 +1807,9 @@ SHORT = {
     "Чёрный": "Хлеб чёрный",
 }
 
-
 def _short_name(s: str) -> str:
     ru = _ru_only(s)
     return SHORT.get(ru, ru)
-
 
 def _fmt_money(x):
     try:
@@ -1819,8 +1817,24 @@ def _fmt_money(x):
     except Exception:
         return f"{x}€"
 
+def _floor_norm(f: str | None) -> str:
+    f = (f or "").strip()
+    if not f:
+        return "Без этажа"
+    return f
 
-def _rows_table(rows):
+def _floor_sort_key(k: str):
+    # Поддержим оба формата
+    kk = (k or "").lower()
+    if "1st" in kk or "1 этаж" in kk:
+        return (0, 1)
+    if "6th" in kk or "6 этаж" in kk:
+        return (0, 6)
+    if "без" in kk:
+        return (2, 999)
+    return (1, k)
+
+def _rows_table_v2(rows):
     head = """
     <table class="admin-table">
       <thead>
@@ -1847,19 +1861,15 @@ def _rows_table(rows):
     body = ""
     for r in rows:
         drink = "—"
-        try:
-            if r["drink_label"]:
-                dp = r["drink_price_eur"] or 0
-                drink = f"{_ru_only(r['drink_label'])} (+{float(dp):.2f}€)"
-        except Exception:
-            drink = "—"
-
+        if r["drink_label"]:
+            dp = r["drink_price_eur"] or 0
+            drink = f"{_ru_only(r['drink_label'])} (+{float(dp):.2f}€)"
         body += f"""
         <tr>
           <td><b>{r['order_code']}</b></td>
           <td>{r['name']}</td>
           <td>{r['phone_raw']}</td>
-          <td>{r['floor'] or '—'}</td>
+          <td>{_floor_norm(r['floor'])}</td>
           <td><b>{_fmt_money(r['price_eur'])}</b></td>
           <td>{_short_name(r['soup']) if r['soup'] else '—'}</td>
           <td>{_short_name(r['zakuska']) if r['zakuska'] else '—'}</td>
@@ -1872,62 +1882,54 @@ def _rows_table(rows):
         """
     return head + body + "</tbody></table>"
 
+def _summary_counts(rows):
+    opt_counts = {"opt1": 0, "opt2": 0, "opt3": 0}
+    dish_counts = {}
+    drink_counts = {}
 
-def _summary_table(title: str, counts: dict) -> str:
+    for r in rows:
+        if r["option_code"] in opt_counts:
+            opt_counts[r["option_code"]] += 1
+
+        for k in ["soup", "zakuska", "hot", "dessert", "bread"]:
+            v = r[k]
+            if v:
+                vv = _short_name(v)
+                dish_counts[vv] = dish_counts.get(vv, 0) + 1
+
+        if r["drink_label"]:
+            dd = _ru_only(r["drink_label"])
+            drink_counts[dd] = drink_counts.get(dd, 0) + 1
+
+    return opt_counts, dish_counts, drink_counts
+
+def _simple_table(title: str, counts: dict) -> str:
     rows_html = ""
     for k, v in sorted(counts.items(), key=lambda x: (-x[1], x[0])):
-        rows_html += f"<tr><td>{k}</td><td><b>{v}</b></td></tr>"
+        rows_html += f"<tr><td>{k}</td><td style='text-align:right;'><b>{v}</b></td></tr>"
     if not rows_html:
         rows_html = "<tr><td colspan='2' class='muted'>—</td></tr>"
 
     return f"""
     <div class="card">
-      <h3>{title}</h3>
+      <h3 style="margin:0 0 10px 0;">{title}</h3>
       <table class="admin-table">
-        <thead><tr><th>Позиция</th><th>Кол-во</th></tr></thead>
-        <tbody>
-          {rows_html}
-        </tbody>
+        <thead><tr><th>Позиция</th><th style="text-align:right;">Кол-во</th></tr></thead>
+        <tbody>{rows_html}</tbody>
       </table>
     </div>
     """
 
-
-ADMIN_SUMMARY_CSS = """
-<style>
-  @media print {
-    .no-print { display:none !important; }
-    body { margin:0; }
-    .card { border:none; margin:0; padding:0; }
-    a { color:#000; text-decoration:none; }
-  }
-</style>
-"""
-
-ADMIN_PRINT_CSS = """
-<style>
-  @media print{
-    body{ margin:0; background:#fff !important; }
-    .card{ border:0 !important; margin:0; padding:0; background:#fff !important; }
-    table, th, td{ background:#fff !important; }
-    .admin-table th{ background:#fff !important; }
-    *{ -webkit-print-color-adjust: economy; print-color-adjust: economy; }
-    body{ font-size:11px; }
-    .admin-table{ font-size:10px; }
-    .admin-table th, .admin-table td{ padding:4px 6px; }
-    .no-print, button, a{ display:none !important; }
-    .admin-table td:last-child{
-      max-width:260px;
-      white-space:normal;
-      word-break:break-word;
-    }
-  }
-</style>
-"""
+def _active_by_floor(rows):
+    g = {}
+    for r in rows:
+        k = _floor_norm(r["floor"])
+        g.setdefault(k, []).append(r)
+    return g
 
 
 @app.get("/admin")
-def admin():
+def admin_v2():
     if not check_admin():
         return html_page("<h2>⛔ Нет доступа</h2><p>Нужен token.</p>"), 403
 
@@ -1962,36 +1964,33 @@ def admin():
         (office, d.isoformat()),
     ).fetchall()
 
-    opt_counts = {"opt1": 0, "opt2": 0, "opt3": 0}
-    dish_counts = {}
-    drink_counts = {}
-
-    for r in active_rows:
-        if r["option_code"] in opt_counts:
-            opt_counts[r["option_code"]] += 1
-
-        for k in ["soup", "zakuska", "hot", "dessert", "bread"]:
-            v = r[k]
-            if v:
-                vv = _short_name(v)
-                dish_counts[vv] = dish_counts.get(vv, 0) + 1
-
-        if r["drink_label"]:
-            dd = _ru_only(r["drink_label"])
-            drink_counts[dd] = drink_counts.get(dd, 0) + 1
-
-    special = get_weekly_special(office, d)
     conn.close()
+
+    active_groups = _active_by_floor(active_rows)
+    opt_counts, dish_counts, drink_counts = _summary_counts(active_rows)
 
     office_opts = "".join([f"<option value='{o}' {'selected' if o==office else ''}>{o}</option>" for o in OFFICES])
 
-    special_block = "<p class='muted'>Блюдо недели: —</p>"
-    if special:
-        special_block = (
-            f"<p><b>Блюдо недели:</b> {special['title']} "
-            f"(доплата +{int(special['surcharge_eur'])}€) "
-            f"<small class='muted'>[{special['start_date']} … {special['end_date']}]</small></p>"
-        )
+    # Блок активных, сгруппированных по этажу
+    active_html = ""
+    for floor_name in sorted(active_groups.keys(), key=_floor_sort_key):
+        rr = active_groups[floor_name]
+        active_html += f"""
+        <div class="card">
+          <div style="display:flex; align-items:baseline; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+            <h3 style="margin:0;">Активные — {floor_name}</h3>
+            <div class="muted" style="font-weight:800;">{len(rr)} шт.</div>
+          </div>
+
+          <div class="no-print" style="margin-top:10px; display:flex; gap:10px; flex-wrap:wrap;">
+            <a class="btn-primary" href="/admin/print?office={office}&date={d.isoformat()}&floor={floor_name}&token={ADMIN_TOKEN}">
+              🖨 Печать: {floor_name}
+            </a>
+          </div>
+
+          {_rows_table_v2(rr)}
+        </div>
+        """
 
     body = f"""
     <h1>Админка</h1>
@@ -2017,23 +2016,18 @@ def admin():
           ⬇️ Выгрузка CSV (активные)
         </a>
         &nbsp;|&nbsp;
-
         <a href="/admin/print?office={office}&date={d.isoformat()}&token={ADMIN_TOKEN}">
-          🖨 Печать активных
+          🖨 Печать активных (все)
         </a>
         &nbsp;|&nbsp;
-
         <a href="/admin/summary?office={office}&date={d.isoformat()}&token={ADMIN_TOKEN}">
           🧾 Сводка (печать)
         </a>
         &nbsp;|&nbsp;
-
-        <a href="/admin/special?office={office}&date={d.isoformat()}&token={ADMIN_TOKEN}">
-          ⭐ Блюдо недели
+        <a href="/admin/specials?office={office}&date={d.isoformat()}&token={ADMIN_TOKEN}">
+          ⭐ Блюдо недели (управление)
         </a>
       </p>
-
-      {special_block}
 
       <p>
         <span class="pill">Опция 1: {opt_counts.get('opt1',0)}</span>
@@ -2042,108 +2036,35 @@ def admin():
       </p>
     </div>
 
-    <div class="card">
-      <h3>Активные заказы</h3>
-      {_rows_table(active_rows)}
-    </div>
+    {active_html}
 
     <div class="card">
       <h3>Отменённые заказы</h3>
-      {_rows_table(cancelled_rows)}
+      {_rows_table_v2(cancelled_rows)}
     </div>
 
-    {_summary_table("Сводка по блюдам (активные)", dish_counts)}
-    {_summary_table("Сводка по напиткам (активные)", drink_counts)}
+    {_simple_table("Сводка по блюдам (активные)", dish_counts)}
+    {_simple_table("Сводка по напиткам (активные)", drink_counts)}
     """
     return html_page(body)
 
+
+# --- Summary page (kitchen/bar) ---
+ADMIN_SUMMARY_CSS = """
+<style>
+  @media print {
+    .no-print { display:none !important; }
+    body { margin:0; }
+    .card { border:none; margin:0; padding:0; }
+    a { color:#000; text-decoration:none; }
+  }
+</style>
+"""
 
 @app.get("/admin/summary")
-def admin_summary():
+def admin_summary_v2():
     if not check_admin():
         return html_page("<h2>⛔ Нет доступа</h2><p>Нужен token.</p>"), 403
-
-    office = request.args.get("office", OFFICES[0])
-    if office not in OFFICES:
-        office = OFFICES[0]
-
-    d_str = request.args.get("date", date.today().isoformat())
-    try:
-        d = date.fromisoformat(d_str)
-    except ValueError:
-        d = date.today()
-
-    conn = db()
-    ensure_columns(conn)
-
-    active_rows = conn.execute(
-        """
-        SELECT soup, zakuska, hot, dessert, bread, drink_label
-        FROM orders
-        WHERE office=? AND order_date=? AND status='active'
-        """,
-        (office, d.isoformat()),
-    ).fetchall()
-    conn.close()
-
-    dish_counts = {}
-    drink_counts = {}
-
-    for r in active_rows:
-        for k in ["soup", "zakuska", "hot", "dessert", "bread"]:
-            v = r[k]
-            if v:
-                vv = _short_name(v)
-                dish_counts[vv] = dish_counts.get(vv, 0) + 1
-
-        if r["drink_label"]:
-            dd = _ru_only(r["drink_label"])
-            drink_counts[dd] = drink_counts.get(dd, 0) + 1
-
-    def _simple_table(title: str, counts: dict) -> str:
-        rows_html = ""
-        for k, v in sorted(counts.items(), key=lambda x: (-x[1], x[0])):
-            rows_html += f"<tr><td>{k}</td><td style='text-align:right;'><b>{v}</b></td></tr>"
-        if not rows_html:
-            rows_html = "<tr><td colspan='2' class='muted'>—</td></tr>"
-        return f"""
-        <h3 style="margin:0 0 10px 0;">{title}</h3>
-        <table class="admin-table">
-          <thead><tr><th>Позиция</th><th style="text-align:right;">Кол-во</th></tr></thead>
-          <tbody>{rows_html}</tbody>
-        </table>
-        """
-
-    body = f"""
-    {ADMIN_SUMMARY_CSS}
-
-    <h1>Сводка (кухня/бар)</h1>
-
-    <div class="card">
-      <p><b>Офис:</b> {office} &nbsp; | &nbsp; <b>Дата:</b> {d.isoformat()}</p>
-
-      <div class="no-print" style="margin-top:12px; display:flex; gap:10px; flex-wrap:wrap;">
-        <a class="btn-primary" href="/admin?office={office}&date={d.isoformat()}&token={ADMIN_TOKEN}">← Назад в админку</a>
-        <a class="btn-primary" href="/admin/summary.csv?office={office}&date={d.isoformat()}&token={ADMIN_TOKEN}">Скачать CSV (сводка)</a>
-        <button class="btn-primary" type="button" onclick="window.print()">Печать / PDF</button>
-      </div>
-
-      <div style="margin-top:16px;">
-        {_simple_table("Блюда (активные)", dish_counts)}
-      </div>
-
-      <div style="margin-top:18px;">
-        {_simple_table("Напитки (активные)", drink_counts)}
-      </div>
-    </div>
-    """
-    return html_page(body)
-
-
-@app.get("/admin/summary.csv")
-def admin_summary_csv():
-    if not check_admin():
-        return Response("Forbidden\n", status=403, mimetype="text/plain")
 
     office = request.args.get("office", OFFICES[0])
     if office not in OFFICES:
@@ -2160,7 +2081,7 @@ def admin_summary_csv():
 
     rows = conn.execute(
         """
-        SELECT soup, zakuska, hot, dessert, bread, drink_label
+        SELECT option_code, soup, zakuska, hot, dessert, bread, drink_label
         FROM orders
         WHERE office=? AND order_date=? AND status='active'
         """,
@@ -2168,44 +2089,137 @@ def admin_summary_csv():
     ).fetchall()
     conn.close()
 
+    # превратим в “как будто полные rows”
+    fake = []
+    for r in rows:
+        fake.append({
+            "option_code": r["option_code"],
+            "soup": r["soup"], "zakuska": r["zakuska"], "hot": r["hot"], "dessert": r["dessert"], "bread": r["bread"],
+            "drink_label": r["drink_label"],
+        })
+    # быстро переиспользуем summary_counts, но он ждёт dict-like с ключами.
+    # проще: пересчитаем здесь напрямую.
     dish_counts = {}
     drink_counts = {}
-
     for r in rows:
         for k in ["soup", "zakuska", "hot", "dessert", "bread"]:
             v = r[k]
             if v:
                 vv = _short_name(v)
                 dish_counts[vv] = dish_counts.get(vv, 0) + 1
-
         if r["drink_label"]:
             dd = _ru_only(r["drink_label"])
             drink_counts[dd] = drink_counts.get(dd, 0) + 1
 
-    lines = ["тип;позиция;кол-во"]
+    body = f"""
+    {ADMIN_SUMMARY_CSS}
+    <h1>Сводка (кухня/бар)</h1>
 
-    def esc(s):
-        s = "" if s is None else str(s)
-        s = s.replace('"', '""')
-        return f'"{s}"'
+    <div class="card">
+      <p><b>Офис:</b> {office} &nbsp; | &nbsp; <b>Дата:</b> {d.isoformat()}</p>
 
-    for k, v in sorted(dish_counts.items(), key=lambda x: (-x[1], x[0])):
-        lines.append(";".join([esc("блюдо"), esc(k), esc(v)]))
+      <div class="no-print" style="margin-top:12px; display:flex; gap:10px; flex-wrap:wrap;">
+        <a class="btn-primary" href="/admin?office={office}&date={d.isoformat()}&token={ADMIN_TOKEN}">← Назад в админку</a>
+        <button class="btn-primary" type="button" onclick="window.print()">Печать / PDF</button>
+      </div>
 
-    for k, v in sorted(drink_counts.items(), key=lambda x: (-x[1], x[0])):
-        lines.append(";".join([esc("напиток"), esc(k), esc(v)]))
+      <div style="margin-top:16px;">
+        {_simple_table("Блюда (активные)", dish_counts)}
+      </div>
 
-    csv_data = "\ufeff" + "\n".join(lines) + "\n"
+      <div style="margin-top:18px;">
+        {_simple_table("Напитки (активные)", drink_counts)}
+      </div>
+    </div>
+    """
+    return html_page(body)
 
-    return Response(
-        csv_data,
-        mimetype="text/csv; charset=utf-8",
-        headers={"Content-Disposition": f'attachment; filename="summary_{office}_{d.isoformat()}.csv"'},
-    )
 
+# --- Print active (all or by floor) ---
+ADMIN_PRINT_CSS = """
+<style>
+  @media print{
+    body{ margin:0; background:#fff !important; }
+    .card{ border:0 !important; margin:0; padding:0; background:#fff !important; }
+    table, th, td{ background:#fff !important; }
+    .admin-table th{ background:#fff !important; }
+    *{ -webkit-print-color-adjust: economy; print-color-adjust: economy; }
+
+    body{ font-size:11px; }
+    .admin-table{ font-size:10px; }
+    .admin-table th, .admin-table td{ padding:4px 6px; }
+    .admin-table td:last-child{ max-width:260px; white-space:normal; word-break:break-word; }
+
+    .no-print, button, a{ display:none !important; }
+  }
+</style>
+"""
 
 @app.get("/admin/print")
-def admin_print_active():
+def admin_print_active_v2():
+    if not check_admin():
+        return html_page("<h2>⛔ Нет доступа</h2><p>Нужен token.</p>"), 403
+
+    office = request.args.get("office", OFFICES[0])
+    if office not in OFFICES:
+        office = OFFICES[0]
+
+    d_str = request.args.get("date", date.today().isoformat())
+    try:
+        d = date.fromisoformat(d_str)
+    except ValueError:
+        d = date.today()
+
+    floor_filter = (request.args.get("floor", "") or "").strip()
+
+    conn = db()
+    ensure_columns(conn)
+
+    if floor_filter:
+        rows = conn.execute(
+            """
+            SELECT * FROM orders
+            WHERE office=? AND order_date=? AND status='active' AND COALESCE(floor,'')=?
+            ORDER BY created_at ASC
+            """,
+            (office, d.isoformat(), floor_filter if floor_filter != "Без этажа" else ""),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            """
+            SELECT * FROM orders
+            WHERE office=? AND order_date=? AND status='active'
+            ORDER BY created_at ASC
+            """,
+            (office, d.isoformat()),
+        ).fetchall()
+
+    conn.close()
+
+    title = "Печать — активные заказы" + (f" — {floor_filter}" if floor_filter else "")
+
+    body = f"""
+    {ADMIN_PRINT_CSS}
+    <h1 style="text-align:center;">{title}</h1>
+    <p style="text-align:center; font-weight:800;">
+      Офис: {office} &nbsp; | &nbsp; Дата: {d.isoformat()}
+    </p>
+
+    <div class="card">
+      {_rows_table_v2(rows)}
+
+      <div class="no-print" style="margin-top:14px; display:flex; gap:10px; flex-wrap:wrap;">
+        <button class="btn-primary" type="button" onclick="window.print()">🖨 Печать</button>
+        <a class="btn-danger" href="/admin?office={office}&date={d.isoformat()}&token={ADMIN_TOKEN}">← Назад</a>
+      </div>
+    </div>
+    """
+    return html_page(body)
+
+
+# --- Specials management: list + create + delete ---
+@app.get("/admin/specials")
+def admin_specials_get():
     if not check_admin():
         return html_page("<h2>⛔ Нет доступа</h2><p>Нужен token.</p>"), 403
 
@@ -2220,67 +2234,73 @@ def admin_print_active():
         d = date.today()
 
     conn = db()
-    ensure_columns(conn)
-    active_rows = conn.execute(
+    rows = conn.execute(
         """
-        SELECT * FROM orders
-        WHERE office=? AND order_date=? AND status='active'
-        ORDER BY created_at ASC
+        SELECT * FROM weekly_special
+        WHERE office=?
+        ORDER BY id DESC
+        LIMIT 30
         """,
-        (office, d.isoformat()),
+        (office,),
     ).fetchall()
     conn.close()
 
-    body = f"""
-    {ADMIN_PRINT_CSS}
-
-    <h1 style="text-align:center;">Печать — активные заказы</h1>
-    <p style="text-align:center; font-weight:800;">
-      Офис: {office} &nbsp; | &nbsp; Дата: {d.isoformat()}
-    </p>
-
-    <div class="card">
-      {_rows_table(active_rows)}
-
-      <div class="no-print" style="margin-top:14px; display:flex; gap:10px; flex-wrap:wrap;">
-        <button class="btn-primary" type="button" onclick="window.print()">🖨 Печать</button>
-        <a class="btn-danger" href="/admin?office={office}&date={d.isoformat()}&token={ADMIN_TOKEN}">← Назад</a>
-      </div>
-    </div>
-    """
-    return html_page(body)
-
-
-@app.get("/admin/special")
-def admin_special_get():
-    if not check_admin():
-        return html_page("<h2>⛔ Нет доступа</h2><p>Нужен token.</p>"), 403
-
-    office = request.args.get("office", OFFICES[0])
-    if office not in OFFICES:
-        office = OFFICES[0]
-
-    d_str = request.args.get("date", date.today().isoformat())
-    try:
-        d = date.fromisoformat(d_str)
-    except ValueError:
-        d = date.today()
-
-    special = get_weekly_special(office, d)
-
+    # form defaults
     start_default = d.isoformat()
     end_default = (d + timedelta(days=6)).isoformat()
-    title_default = special["title"] if special else ""
-    surcharge_default = int(special["surcharge_eur"]) if special else 0
 
     office_opts = "".join([f"<option value='{o}' {'selected' if o==office else ''}>{o}</option>" for o in OFFICES])
 
+    list_html = ""
+    for r in rows:
+        list_html += f"""
+        <tr>
+          <td><b>{r['id']}</b></td>
+          <td>{r['start_date']} → {r['end_date']}</td>
+          <td>{r['title']}</td>
+          <td style="text-align:right;">+{int(r['surcharge_eur'])}€</td>
+          <td style="text-align:right;">
+            <form method="post" action="/admin/specials/delete?token={ADMIN_TOKEN}" onsubmit="return confirm('Удалить блюдо недели?');">
+              <input type="hidden" name="id" value="{r['id']}">
+              <input type="hidden" name="office" value="{office}">
+              <input type="hidden" name="date" value="{d.isoformat()}">
+              <button class="btn-danger" type="submit">Удалить</button>
+            </form>
+          </td>
+        </tr>
+        """
+
+    if not list_html:
+        list_html = "<tr><td colspan='5' class='muted'>—</td></tr>"
+
     body = f"""
-    <h1>Блюдо недели</h1>
+    <h1>Блюдо недели — управление</h1>
+
     <div class="card">
-      <form method="post" action="/admin/special?token={ADMIN_TOKEN}">
-        <label>Офис</label>
-        <select name="office" required>{office_opts}</select>
+      <form method="get" action="/admin/specials">
+        <input type="hidden" name="token" value="{ADMIN_TOKEN}">
+        <div class="row">
+          <div>
+            <label>Офис</label>
+            <select name="office">{office_opts}</select>
+          </div>
+          <div>
+            <label>Дата (для удобства)</label>
+            <input type="date" name="date" value="{d.isoformat()}">
+          </div>
+        </div>
+        <button class="btn-primary" type="submit">Показать</button>
+      </form>
+
+      <p style="margin-top:14px;">
+        <a href="/admin?office={office}&date={d.isoformat()}&token={ADMIN_TOKEN}">← Назад в админку</a>
+      </p>
+    </div>
+
+    <div class="card">
+      <h3>Создать / обновить (через добавление новой записи)</h3>
+      <form method="post" action="/admin/specials/create?token={ADMIN_TOKEN}">
+        <input type="hidden" name="office" value="{office}">
 
         <div class="row">
           <div>
@@ -2294,23 +2314,39 @@ def admin_special_get():
         </div>
 
         <label>Название блюда недели (горячее)</label>
-        <input name="title" value="{title_default}" placeholder="Напр. Бефстроганов" required>
+        <input name="title" placeholder="Напр. Бефстроганов" required>
 
         <label>Доплата, €</label>
-        <input name="surcharge_eur" type="number" min="0" step="1" value="{surcharge_default}" required>
+        <input name="surcharge_eur" type="number" min="0" step="1" value="0" required>
 
         <button class="btn-primary" type="submit">Сохранить</button>
       </form>
+      <p class="muted">Мы не “редактируем” старые — мы добавляем новую запись. История сохраняется.</p>
+    </div>
 
-      <p class="muted">После сохранения появится в “Горячее” как “Блюдо недели: … (+X€)”.</p>
-      <p><a href="/admin?office={office}&date={d.isoformat()}&token={ADMIN_TOKEN}">← Назад в админку</a></p>
+    <div class="card">
+      <h3>Последние 30 записей</h3>
+      <table class="admin-table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Период</th>
+            <th>Название</th>
+            <th style="text-align:right;">Доплата</th>
+            <th style="text-align:right;">Действия</th>
+          </tr>
+        </thead>
+        <tbody>
+          {list_html}
+        </tbody>
+      </table>
     </div>
     """
     return html_page(body)
 
 
-@app.post("/admin/special")
-def admin_special_post():
+@app.post("/admin/specials/create")
+def admin_specials_create_post():
     if not check_admin():
         return html_page("<h2>⛔ Нет доступа</h2><p>Нужен token.</p>"), 403
 
@@ -2349,83 +2385,37 @@ def admin_special_post():
     conn.commit()
     conn.close()
 
-    return redirect(f"/admin?office={office}&date={start_date.isoformat()}&token={ADMIN_TOKEN}")
+    return redirect(f"/admin/specials?office={office}&date={start_date.isoformat()}&token={ADMIN_TOKEN}")
 
 
-@app.get("/export.csv")
-def export_csv():
+@app.post("/admin/specials/delete")
+def admin_specials_delete_post():
     if not check_admin():
-        return Response("Forbidden\n", status=403, mimetype="text/plain")
+        return html_page("<h2>⛔ Нет доступа</h2><p>Нужен token.</p>"), 403
 
-    office = request.args.get("office", OFFICES[0])
-    d_str = request.args.get("date", date.today().isoformat())
     try:
-        d = date.fromisoformat(d_str)
+        sid = int(request.form.get("id", "0"))
     except ValueError:
-        d = date.today()
+        sid = 0
+    if sid <= 0:
+        return html_page("<p class='danger'>Ошибка: неверный id.</p>"), 400
 
     conn = db()
-    ensure_columns(conn)
-
-    rows = conn.execute(
-        """
-        SELECT order_code, office, order_date, floor, name, phone_raw, option_code, price_eur,
-               soup, zakuska, hot, dessert,
-               drink_label, drink_price_eur,
-               bread, comment, status
-        FROM orders
-        WHERE office=? AND order_date=? AND status='active'
-        ORDER BY created_at ASC
-        """,
-        (office, d.isoformat()),
-    ).fetchall()
+    conn.execute("DELETE FROM weekly_special WHERE id=?", (sid,))
+    conn.commit()
     conn.close()
 
-    def esc(s):
-        s = "" if s is None else str(s)
-        s = _short_name(s)
-        s = s.replace('"', '""')
-        return f'"{s}"'
+    office = (request.form.get("office", OFFICES[0]) or "").strip()
+    if office not in OFFICES:
+        office = OFFICES[0]
+    d = (request.form.get("date", date.today().isoformat()) or "").strip()
 
-    header = "код;офис;дата;этаж;имя;телефон;опция;итого_евро;суп;закуска;горячее;десерт;напиток;цена_напитка_евро;хлеб;комментарий;статус"
-    lines = [header]
-
-    for r in rows:
-        drink_ru = _ru_only(r["drink_label"]) if r["drink_label"] else ""
-        lines.append(
-            ";".join(
-                [
-                    esc(r["order_code"]),
-                    esc(r["office"]),
-                    esc(r["order_date"]),
-                    esc(r["floor"] or ""),
-                    esc(r["name"]),
-                    esc(r["phone_raw"]),
-                    esc(r["option_code"]),
-                    esc(r["price_eur"]),
-                    esc(r["soup"]),
-                    esc(r["zakuska"]),
-                    esc(r["hot"]),
-                    esc(r["dessert"]),
-                    esc(drink_ru),
-                    esc(r["drink_price_eur"]),
-                    esc(r["bread"]),
-                    esc(r["comment"]),
-                    esc(r["status"]),
-                ]
-            )
-        )
-
-    csv_data = "\ufeff" + "\n".join(lines) + "\n"
-    return Response(
-        csv_data,
-        mimetype="text/csv; charset=utf-8",
-        headers={"Content-Disposition": f'attachment; filename="orders_{office}_{d.isoformat()}.csv"'},
-    )
+    return redirect(f"/admin/specials?office={office}&date={d}&token={ADMIN_TOKEN}")
 
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
