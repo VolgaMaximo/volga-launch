@@ -947,9 +947,13 @@ document.addEventListener("click", (e)=>{
 /* ====== FLOOR (ALAMEDA only) ====== */
 (() => {
   const officeEl = document.getElementById("office");
-  const floorRow = document.getElementById("floorCell");
-...
-floorRow.style.display = isAlameda ? "block" : "none";
+  const floorCell = document.getElementById("floorCell");
+  const floorEl = document.getElementById("floor");
+  if (!officeEl || !floorCell || !floorEl) return;
+
+  function syncFloor(){
+    const isAlameda = officeEl.value === "ALAMEDA";
+    floorCell.style.display = isAlameda ? "block" : "none";
     floorEl.required = isAlameda;
     if (!isAlameda) floorEl.value = "";
   }
@@ -1045,31 +1049,28 @@ def form():
 
 <div class="card">
   <form method="post" action="/order" autocomplete="on">
-   <div class="row">
-  <div>
-    <label>Офис / Office</label>
-    <select id="office" name="office" required>{office_opts}</select>
-  </div>
 
-  <div id="floorCell" style="display:none;">
-    <label>Этаж / Floor</label>
-    <select id="floor" name="floor">
-      <option value="">— Выбери этаж / choose floor —</option>
-      <option value="1 этаж / 1st floor">1st floor</option>
-      <option value="6 этаж / 6th floor">6th floor</option>
-    </select>
-  </div>
-</div>
+    <div class="row">
+      <div>
+        <label>Офис / Office</label>
+        <select id="office" name="office" required>{office_opts}</select>
+      </div>
 
-<div class="row">
-  <div>
-    <label>Дата доставки / Delivery date</label>
-    <input id="order_date" type="date" name="order_date" value="{d.isoformat()}" required>
-  </div>
-  <div></div>
-</div>
-  <div></div>
-</div>
+      <div id="floorCell" style="display:none;">
+        <label>Этаж / Floor</label>
+        <select id="floor" name="floor">
+          <option value="">— Выбери этаж / choose floor —</option>
+          <option value="1 этаж / 1st floor">1 этаж / 1st floor</option>
+          <option value="6 этаж / 6th floor">6 этаж / 6th floor</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <label>Дата доставки / Delivery date</label>
+        <input id="order_date" type="date" name="order_date" value="{d.isoformat()}" required>
+      </div>
       <div></div>
     </div>
 
@@ -1084,7 +1085,6 @@ def form():
         <small>для связи и поиска заказа / for contact & order lookup</small>
       </div>
     </div>
-
     <div class="banner-block">
       <img src="/banner.png" alt="Options" style="width:100%; display:block; border:2px solid var(--volga-blue);">
     </div>
@@ -2311,6 +2311,7 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
