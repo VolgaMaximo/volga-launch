@@ -947,13 +947,9 @@ document.addEventListener("click", (e)=>{
 /* ====== FLOOR (ALAMEDA only) ====== */
 (() => {
   const officeEl = document.getElementById("office");
-  const floorRow = document.getElementById("floorRow");
-  const floorEl = document.getElementById("floor");
-  if (!officeEl || !floorRow || !floorEl) return;
-
-  function syncFloor(){
-    const isAlameda = officeEl.value === "ALAMEDA";
-    floorRow.style.display = isAlameda ? "grid" : "none";
+  const floorRow = document.getElementById("floorCell");
+...
+floorRow.style.display = isAlameda ? "block" : "none";
     floorEl.required = isAlameda;
     if (!isAlameda) floorEl.value = "";
   }
@@ -1049,24 +1045,20 @@ def form():
 
 <div class="card">
   <form method="post" action="/order" autocomplete="on">
-    <div class="row">
+   <div class="row">
   <div>
     <label>Офис / Office</label>
     <select id="office" name="office" required>{office_opts}</select>
   </div>
-  <div></div>
-</div>
 
-<div class="row" id="floorRow" style="display:none;">
-  <div>
+  <div id="floorCell" style="display:none;">
     <label>Этаж / Floor</label>
     <select id="floor" name="floor">
-      <option value="">— выбери этаж / choose floor —</option>
+      <option value="">— Выбери этаж / choose floor —</option>
       <option value="1 этаж / 1st floor">1st floor</option>
       <option value="6 этаж / 6th floor">6th floor</option>
     </select>
   </div>
-  <div></div>
 </div>
 
 <div class="row">
@@ -1074,6 +1066,8 @@ def form():
     <label>Дата доставки / Delivery date</label>
     <input id="order_date" type="date" name="order_date" value="{d.isoformat()}" required>
   </div>
+  <div></div>
+</div>
   <div></div>
 </div>
       <div></div>
@@ -2317,6 +2311,7 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
