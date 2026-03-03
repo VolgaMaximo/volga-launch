@@ -1050,26 +1050,32 @@ def form():
 <div class="card">
   <form method="post" action="/order" autocomplete="on">
     <div class="row">
-      <div>
-        <label>Офис / Office</label>
-        <select id="office" name="office" required>{office_opts}</select>
-      </div>
-      <div>
-        <label>Дата доставки / Delivery date</label>
-        <input id="order_date" type="date" name="order_date" value="{d.isoformat()}" required>
-      </div>
-    </div>
+  <div>
+    <label>Офис / Office</label>
+    <select id="office" name="office" required>{office_opts}</select>
+  </div>
+  <div></div>
+</div>
 
-    <!-- ✅ FLOOR: показываем только для ALAMEDA (JS) -->
-    <div class="row" id="floorRow" style="display:none;">
-      <div>
-        <label>Этаж (ALAMEDA) / Floor (ALAMEDA)</label>
-        <select id="floor" name="floor">
-          <option value="">— choose floor —</option>
-          <option value="1st floor">1st floor</option>
-          <option value="6th floor">6th floor</option>
-        </select>
-      </div>
+<div class="row" id="floorRow" style="display:none;">
+  <div>
+    <label>Этаж / Floor</label>
+    <select id="floor" name="floor">
+      <option value="">— выбери этаж / choose floor —</option>
+      <option value="1 этаж / 1st floor">1st floor</option>
+      <option value="6 этаж / 6th floor">6th floor</option>
+    </select>
+  </div>
+  <div></div>
+</div>
+
+<div class="row">
+  <div>
+    <label>Дата доставки / Delivery date</label>
+    <input id="order_date" type="date" name="order_date" value="{d.isoformat()}" required>
+  </div>
+  <div></div>
+</div>
       <div></div>
     </div>
 
@@ -2311,6 +2317,7 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
