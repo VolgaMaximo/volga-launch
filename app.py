@@ -962,7 +962,44 @@ document.addEventListener("click", (e)=>{
   syncFloor();
 })();
 </script>
+<script>
+/* ====== FLOOR REQUIRED UX (VOLGA popup + focus) ====== */
+(() => {
+  const form = document.querySelector('form[action="/order"]');
+  if (!form) return;
 
+  const officeEl = document.getElementById("office");
+  const floorEl = document.getElementById("floor");
+  const floorCell = document.getElementById("floorCell");
+
+  if (!officeEl || !floorEl || !floorCell) return;
+
+  function needFloor(){
+    return officeEl.value === "ALAMEDA";
+  }
+
+  function showFloorError(){
+    // на всякий случай раскрываем поле, если вдруг скрыто
+    floorCell.style.display = "block";
+
+    showVolgaPopup(
+      "Пожалуйста, выберите этаж для ALAMEDA.<br><br>" +
+      "Please choose a floor for ALAMEDA."
+    );
+
+    // прокрутить к полю и поставить фокус
+    floorEl.scrollIntoView({ behavior: "smooth", block: "center" });
+    setTimeout(() => floorEl.focus(), 200);
+  }
+
+  form.addEventListener("submit", (e) => {
+    if (needFloor() && (!floorEl.value || floorEl.value.trim() === "")) {
+      e.preventDefault();
+      showFloorError();
+    }
+  });
+})();
+</script>
 </html>"""
     return shell.replace("__BODY__", body)
 
@@ -2311,6 +2348,7 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
