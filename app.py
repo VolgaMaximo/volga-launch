@@ -18,12 +18,10 @@ MAX_PER_DAY = int(os.getenv("MAX_PER_DAY", "30"))
 CUTOFF_HOUR = int(os.getenv("CUTOFF_HOUR", "11"))  # 11:00
 ORDER_PREFIX = os.getenv("ORDER_PREFIX", "VO")
 
-OFFICES = ["ALAMEDA", "MUSICA"]
+# ✅ Один офис — ALAMEDA
+OFFICE = "ALAMEDA"
+OFFICES = ["ALAMEDA"]
 
-# ✅ временно отключаем офис для новых заказов
-INACTIVE_OFFICES = {"MUSICA"}
-
-# ✅ этажи по офисам
 FLOORS_BY_OFFICE = {
     "ALAMEDA": ["1st floor", "6th floor"]
 }
@@ -37,6 +35,8 @@ MENU = {
         "Паштет из куриной печени / Chicken liver pâté",
         "Шуба / Herring under a fur coat",
     ],
+    # ✅ Супы теперь управляются из БД (admin_soups),
+    # этот список — только fallback если в БД пусто
     "soup": [
         "Борщ / Borscht",
         "Солянка сборная мясная / Meat soup solyanka",
@@ -61,7 +61,7 @@ PLOV_SURCHARGE = 3.0
 
 BREAD_OPTIONS = ["Белый / White", "Чёрный / Black"]
 
-# --- Напитки (дополнительно) ---
+# --- Напитки ---
 DRINKS = [
     ("", "— без напитка / no drink —", 0.0),
     ("kvas", "Квас / Kvas €3.5", 3.5),
@@ -94,7 +94,6 @@ def ensure_columns(conn: sqlite3.Connection):
         conn.execute("ALTER TABLE orders ADD COLUMN drink_label TEXT")
     if "drink_price_eur" not in cols:
         conn.execute("ALTER TABLE orders ADD COLUMN drink_price_eur REAL")
-    # ✅ NEW
     if "floor" not in cols:
         conn.execute("ALTER TABLE orders ADD COLUMN floor TEXT")
 
@@ -131,12 +130,8 @@ def init_db():
         """
     )
     conn.execute("CREATE INDEX IF NOT EXISTS idx_orders_office_date ON orders(office, order_date)")
-    conn.execute(
-        """
-        CREATE UNIQUE INDEX IF NOT EXISTS uq_orders_office_date_phone_norm
-        ON orders(office, order_date, phone_norm)
-        """
-    )
+
+    # ✅ НЕТ уникального индекса по телефону — разрешаем два заказа с одного номера
 
     conn.execute(
         """
@@ -152,6 +147,20 @@ def init_db():
         """
     )
     conn.execute("CREATE INDEX IF NOT EXISTS idx_special_office_dates ON weekly_special(office, start_date, end_date)")
+
+    # ✅ Таблица для управления супами через админку
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS admin_soups (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title_ru TEXT NOT NULL,
+            title_en TEXT NOT NULL,
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL
+        )
+        """
+    )
 
     ensure_columns(conn)
     conn.commit()
@@ -173,8 +182,7 @@ def cutoff_dt(d: date) -> datetime:
 
 
 def is_workday(d: date) -> bool:
-    # Доставка/заказы доступны Tue–Fri
-    return d.weekday() in (1, 2, 3, 4)  # Tue=1 ... Fri=4
+    return d.weekday() in (1, 2, 3, 4)  # Tue–Fri
 
 
 def next_workday(d: date) -> date:
@@ -192,11 +200,6 @@ def prev_workday(d: date) -> date:
 
 
 def ordering_window_for(d: date):
-    """
-    Окно приёма заказов на дату d:
-    start = cutoff(предыдущий рабочий день)
-    end   = cutoff(d)
-    """
     start = cutoff_dt(prev_workday(d))
     end = cutoff_dt(d)
     return start, end
@@ -241,7 +244,7 @@ def options_html(items):
     return "".join([f"<option>{x}</option>" for x in items])
 
 
-def get_weekly_special(office: str, d: date):
+def get_weekly_special(d: date):
     conn = db()
     row = conn.execute(
         """
@@ -250,15 +253,33 @@ def get_weekly_special(office: str, d: date):
         ORDER BY id DESC
         LIMIT 1
         """,
-        (office, d.isoformat(), d.isoformat()),
+        (OFFICE, d.isoformat(), d.isoformat()),
     ).fetchone()
     conn.close()
     return row
 
 
-def hot_menu_with_special(office: str, d: date):
+# ✅ Получить активные супы из БД (или fallback из кода)
+def get_soups_list() -> list[str]:
+    # Всегда начинаем с трёх базовых супов
+    result = list(MENU["soup"])
+    # Добавляем супы из админки (активные)
+    conn = db()
+    rows = conn.execute(
+        "SELECT title_ru, title_en FROM admin_soups WHERE active=1 ORDER BY sort_order ASC, id ASC"
+    ).fetchall()
+    conn.close()
+    for r in rows:
+        en = (r["title_en"] or "").strip()
+        ru = (r["title_ru"] or "").strip()
+        if ru:
+            result.append(f"{ru} / {en}" if en else ru)
+    return result
+
+
+def hot_menu_with_special(d: date):
     items = MENU["hot"].copy()
-    special = get_weekly_special(office, d)
+    special = get_weekly_special(d)
     if special:
         label = f"Блюдо недели: {special['title']} / Weekly special: {special['title']}"
         s = int(special["surcharge_eur"])
@@ -268,7 +289,7 @@ def hot_menu_with_special(office: str, d: date):
     return items
 
 
-def compute_option_base_price(zakuska, soup, hot, dessert, office: str, d: date):
+def compute_option_base_price(zakuska, soup, hot, dessert, d: date):
     has_z = bool(zakuska)
     has_s = bool(soup)
     has_h = bool(hot)
@@ -293,7 +314,7 @@ def compute_option_base_price(zakuska, soup, hot, dessert, office: str, d: date)
         price += PLOV_SURCHARGE
 
     if hot and hot.startswith("Блюдо недели:"):
-        special = get_weekly_special(office, d)
+        special = get_weekly_special(d)
         if special:
             price += float(int(special["surcharge_eur"]))
 
@@ -305,7 +326,7 @@ def compute_total_price(base_price: float, drink_code: str) -> float:
     return round(float(base_price) + add, 2)
 
 
-def generate_order_code(conn: sqlite3.Connection, office: str, d: date) -> str:
+def generate_order_code(conn: sqlite3.Connection, d: date) -> str:
     ymd = d.strftime("%Y%m%d")
     like_prefix = f"{ORDER_PREFIX}-{ymd}-"
     row = conn.execute(
@@ -315,7 +336,7 @@ def generate_order_code(conn: sqlite3.Connection, office: str, d: date) -> str:
         ORDER BY order_code DESC
         LIMIT 1
         """,
-        (office, d.isoformat(), like_prefix + "%"),
+        (OFFICE, d.isoformat(), like_prefix + "%"),
     ).fetchone()
 
     if not row:
@@ -334,12 +355,9 @@ def file_path(name: str) -> str:
     return os.path.join(os.path.dirname(__file__), name)
 
 
-def validate_floor_for_office(office: str, floor: str | None) -> tuple[bool, str | None]:
-    """
-    Возвращает (ok, normalized_floor)
-    """
-    if office in FLOORS_BY_OFFICE:
-        allowed = set(FLOORS_BY_OFFICE[office])
+def validate_floor_for_office(floor: str | None) -> tuple[bool, str | None]:
+    allowed = set(FLOORS_BY_OFFICE.get(OFFICE, []))
+    if allowed:
         if floor not in allowed:
             return False, None
         return True, floor
@@ -641,7 +659,6 @@ a:hover{ color:var(--volga-red); }
   }
 }
 
-/* --- ADMIN BUTTONS STYLE --- */
 .btn-primary{
   display:block;
   width:100%;
@@ -728,7 +745,6 @@ __BODY__
 </script>
 
 <style>
-/* === VOLGA POPUP (единый для всего) === */
 #volgaPopupOverlay{
   position:fixed;
   inset:0;
@@ -789,43 +805,31 @@ document.addEventListener("click", (e)=>{
 });
 </script>
 <script>
-/* ====== FLOOR CHECK FIXED (NO SENDING FREEZE) ====== */
+/* ====== FLOOR CHECK ====== */
 (() => {
   const form = document.querySelector('form[action="/order"]');
-  const officeEl = document.getElementById("office");
   const floorEl = document.getElementById("floor");
   const floorCell = document.getElementById("floorCell");
 
-  if (!form || !officeEl || !floorEl || !floorCell) return;
+  if (!form || !floorEl || !floorCell) return;
   if (typeof showVolgaPopup !== "function") return;
 
-  function isAlameda(){
-    return (officeEl.value || "").trim() === "ALAMEDA";
-  }
-
-  function showFloorError(){
-    floorCell.style.display = "block";
-    showVolgaPopup(
-      "Пожалуйста, выберите этаж для ALAMEDA.<br><br>" +
-      "Please choose a floor for ALAMEDA."
-    );
-    floorEl.scrollIntoView({ behavior: "smooth", block: "center" });
-    setTimeout(() => floorEl.focus(), 150);
-  }
-
-  // ВАЖНО: третий параметр true — это фикс зависания
   form.addEventListener("submit", (e) => {
-    if (isAlameda() && (!floorEl.value || floorEl.value.trim() === "")) {
+    if (!floorEl.value || floorEl.value.trim() === "") {
       e.preventDefault();
-      e.stopImmediatePropagation(); // не даем кнопке стать "Sending..."
-      showFloorError();
+      e.stopImmediatePropagation();
+      showVolgaPopup(
+        "Пожалуйста, выберите этаж.<br><br>" +
+        "Please choose a floor."
+      );
+      floorEl.scrollIntoView({ behavior: "smooth", block: "center" });
+      setTimeout(() => floorEl.focus(), 150);
     }
   }, true);
-
 })();
 </script>
 <script>
-/* ====== DISH RULES CHECK (popup instead of server error) ====== */
+/* ====== DISH RULES CHECK ====== */
 (() => {
   const form = document.querySelector('form[action="/order"]');
   if (!form) return;
@@ -847,7 +851,6 @@ document.addEventListener("click", (e)=>{
     setTimeout(() => el.focus(), 150);
   }
 
-  // Capture=true — чтобы сработать ДО anti-double-submit (и не было "Sending...")
   form.addEventListener("submit", (e) => {
     const hasZ = has(z);
     const hasS = has(s);
@@ -856,7 +859,6 @@ document.addEventListener("click", (e)=>{
 
     const count = (hasZ?1:0) + (hasS?1:0) + (hasH?1:0) + (hasD?1:0);
 
-    // 1) Суп обязателен
     if (!hasS){
       e.preventDefault();
       e.stopImmediatePropagation();
@@ -868,7 +870,6 @@ document.addEventListener("click", (e)=>{
       return;
     }
 
-    // 2) Ровно 3 блюда (суп + ещё 2)
     if (count !== 3){
       e.preventDefault();
       e.stopImmediatePropagation();
@@ -876,17 +877,15 @@ document.addEventListener("click", (e)=>{
         "Нужно выбрать 3 блюда. Любая опция включает суп.<br><br>" +
         "Please select 3 dishes. All options come with soup."
       );
-      // подсказка куда смотреть
       if (!hasZ) focusEl(z);
       else if (!hasH) focusEl(h);
       else if (!hasD) focusEl(d);
       return;
     }
 
-    // 3) Проверка корректной комбинации (opt1/opt2/opt3)
-    const isOpt1 = hasZ && hasS && hasD && !hasH; // zak + soup + dessert
-    const isOpt2 = !hasZ && hasS && hasH && hasD; // soup + hot + dessert
-    const isOpt3 = hasZ && hasS && hasH && !hasD; // zak + soup + hot
+    const isOpt1 = hasZ && hasS && hasD && !hasH;
+    const isOpt2 = !hasZ && hasS && hasH && hasD;
+    const isOpt3 = hasZ && hasS && hasH && !hasD;
 
     if (!(isOpt1 || isOpt2 || isOpt3)){
       e.preventDefault();
@@ -896,14 +895,14 @@ document.addEventListener("click", (e)=>{
         "Выберите одну из опций (3 блюда).<br><br>" +
         "Wrong combination. Please follow the options (3 dishes)."
       );
-      focusEl(h); // обычно ошибка здесь, но можно и на баннер прокрутить
+      focusEl(h);
       return;
     }
   }, true);
 })();
 </script>
 <script>
-/* ====== DISH LIMIT (макс 3 блюда) ====== */
+/* ====== DISH LIMIT ====== */
 (function () {
   const MAX_DISHES = 3;
   const dishIds = ["zakuska", "soup", "hot", "dessert"];
@@ -959,7 +958,7 @@ document.addEventListener("click", (e)=>{
 </script>
 
 <script>
-/* ====== DATE VALIDATION (Tue–Fri, и правило 11:00) ====== */
+/* ====== DATE VALIDATION (Tue–Fri, 11:00 rule) ====== */
 (() => {
   const dateInput = document.getElementById("order_date");
   if (!dateInput) return;
@@ -971,7 +970,7 @@ document.addEventListener("click", (e)=>{
   function ymd(d){ return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
 
   function isAllowedDay(d){
-    return d.getDay() >= 2 && d.getDay() <= 5; // Tue–Fri only
+    return d.getDay() >= 2 && d.getDay() <= 5;
   }
 
   function startOfDay(d){
@@ -1010,7 +1009,7 @@ document.addEventListener("click", (e)=>{
     const today = startOfDay(now);
 
     if (startOfDay(sel) < today){
-      showVolgaPopup("Вы выбрали прошедшую дату.<br><br>You can’t choose a past date.");
+      showVolgaPopup("Вы выбрали прошедшую дату.<br><br>You can't choose a past date.");
       return false;
     }
 
@@ -1056,28 +1055,6 @@ document.addEventListener("click", (e)=>{
 })();
 </script>
 
-<script>
-/* ====== FLOOR (ALAMEDA only) ====== */
-(() => {
-  const officeEl = document.getElementById("office");
-  const floorCell = document.getElementById("floorCell");
-  const floorEl = document.getElementById("floor");
-  if (!officeEl || !floorCell || !floorEl) return;
-
-  function syncFloor(){
-    const isAlameda = officeEl.value === "ALAMEDA";
-    floorCell.style.display = isAlameda ? "block" : "none";
-    
-    if (!isAlameda) floorEl.value = "";
-  }
-
-  officeEl.addEventListener("change", syncFloor);
-  syncFloor();
-})();
-</script>
-
-
-
 </html>"""
     return shell.replace("__BODY__", body)
 
@@ -1088,29 +1065,21 @@ document.addEventListener("click", (e)=>{
 @app.get("/")
 def form():
     default_date = compute_default_date()
-
-    office = request.args.get("office", OFFICES[0])
-    if office not in OFFICES:
-        office = OFFICES[0]
-
-    # ✅ если кто-то руками открыл MUSICA — на главной уводим на ALAMEDA
-    if office in INACTIVE_OFFICES:
-        office = OFFICES[0]
-
     d_str = request.args.get("date", default_date.isoformat())
     try:
         d = date.fromisoformat(d_str)
     except ValueError:
         d = default_date
 
-    hot_items = hot_menu_with_special(office, d)
+    soups = get_soups_list()
+    hot_items = hot_menu_with_special(d)
     ok_time, start, end, now_ = validate_order_time(d)
 
     conn = db()
     ensure_columns(conn)
     cnt = conn.execute(
         "SELECT COUNT(*) as c FROM orders WHERE office=? AND order_date=? AND status='active'",
-        (office, d.isoformat()),
+        (OFFICE, d.isoformat()),
     ).fetchone()["c"]
     conn.close()
 
@@ -1127,16 +1096,6 @@ def form():
         )
     if limit_reached:
         warn += "<p class='danger'><b>На выбранную дату заказы временно недоступны.</b><br><small>Orders are temporarily unavailable for this date.</small></p>"
-
-    # ✅ MUSICA disabled в выпадающем списке на главной
-    office_opts = "".join([
-        f"<option value='{o}' "
-        f"{'selected' if o==office else ''} "
-        f"{'disabled' if o in INACTIVE_OFFICES else ''}>"
-        f"{o}{' (temporarily unavailable)' if o in INACTIVE_OFFICES else ''}"
-        f"</option>"
-        for o in OFFICES
-    ])
 
     drink_options = "".join([f"<option value='{k}'>{lbl}</option>" for (k, lbl, _) in DRINKS])
 
@@ -1167,26 +1126,17 @@ def form():
 
     <div class="row">
       <div>
-        <label>Офис / Office</label>
-        <select id="office" name="office" required>{office_opts}</select>
-      </div>
-
-      <div id="floorCell" style="display:none;">
         <label>Этаж / Floor</label>
-       <select id="floor" name="floor">
-  <option value="">— выбери этаж / choose floor —</option>
-  <option value="1st floor">1 этаж / 1st floor</option>
-  <option value="6th floor">6 этаж / 6th floor</option>
-</select>
+        <select id="floor" name="floor" required>
+          <option value="">— выбери этаж / choose floor —</option>
+          <option value="1st floor">1 этаж / 1st floor</option>
+          <option value="6th floor">6 этаж / 6th floor</option>
+        </select>
       </div>
-    </div>
-
-    <div class="row">
       <div>
         <label>Дата доставки / Delivery date</label>
         <input id="order_date" type="date" name="order_date" value="{d.isoformat()}" required>
       </div>
-      <div></div>
     </div>
 
     <div class="row">
@@ -1197,9 +1147,10 @@ def form():
       <div>
         <label>Телефон / Phone</label>
         <input name="phone" required>
-        <small>для связи и поиска заказа / for contact & order lookup</small>
+        <small>для связи и поиска заказа / for contact &amp; order lookup</small>
       </div>
     </div>
+
     <div class="banner-block">
       <img src="/banner.png" alt="Options" style="width:100%; display:block; border:2px solid var(--volga-blue);">
     </div>
@@ -1216,7 +1167,7 @@ def form():
         <label>Суп / Soup</label>
         <select id="soup" name="soup" required>
           <option value="">— выбери суп / choose soup —</option>
-          {options_html(MENU["soup"])}
+          {options_html(soups)}
         </select>
       </div>
     </div>
@@ -1229,7 +1180,6 @@ def form():
           {options_html(hot_items)}
         </select>
       </div>
-
       <div>
         <label>Десерт / Dessert</label>
         <select id="dessert" name="dessert">
@@ -1245,7 +1195,6 @@ def form():
         <select id="drink" name="drink">{drink_options}</select>
         <small>оплачивается отдельно / not included</small>
       </div>
-
       <div>
         <label>Хлеб / Bread</label>
         <select id="bread" name="bread">
@@ -1275,33 +1224,24 @@ def form():
 
 @app.post("/order")
 def order():
-    office = (request.form.get("office", "") or "").strip()
-    if office not in OFFICES:
-        return html_page("<p class='danger'>Ошибка: неизвестный офис / Unknown office.</p><p><a href='/'>Назад / Back</a></p>"), 400
-
-    # ✅ запрет новых заказов в MUSICA
-    if office in INACTIVE_OFFICES:
-        return html_page("<p class='danger'>Этот офис временно недоступен / This office is temporarily unavailable.</p><p><a href='/'>Назад / Back</a></p>"), 403
-
-    order_date = (request.form.get("order_date", "") or "").strip()
+    d_str = (request.form.get("order_date", "") or "").strip()
     try:
-        d = date.fromisoformat(order_date)
+        d = date.fromisoformat(d_str)
     except ValueError:
         return html_page("<p class='danger'>Ошибка: неверная дата / Invalid date.</p><p><a href='/'>Назад / Back</a></p>"), 400
 
-    # ✅ этаж
     floor = (request.form.get("floor", "") or "").strip() or None
-    ok_floor, floor = validate_floor_for_office(office, floor)
+    ok_floor, floor = validate_floor_for_office(floor)
     if not ok_floor:
-        return html_page("<p class='danger'>Выберите этаж (ALAMEDA) / Please choose floor (ALAMEDA).</p><p><a href='/'>Назад / Back</a></p>"), 400
+        return html_page("<p class='danger'>Выберите этаж / Please choose floor.</p><p><a href='/'>Назад / Back</a></p>"), 400
 
     ok_time, start, end, now_ = validate_order_time(d)
     if not ok_time:
         if is_closed_day(d):
             return html_page("<p class='danger'><b>В понедельник мы не работаем.</b><br><small>We are closed on Mondays.</small></p><p><a href='/'>Назад / Back</a></p>"), 403
         return html_page(
-            f"<p class='danger'><b>Приём заказов открыт на сегодня до 11:00. На завтра после 11:00. / Orders for today before 11:00. For tomorrow after 11:00.</b><br>"
-            f"<small>Доступно / Available: {start.strftime('%d.%m %H:%M')} — {end.strftime('%d.%m %H:%M')}. Сейчас / Now: {now_.strftime('%d.%m %H:%M')}.</small></p>"
+            f"<p class='danger'><b>Приём заказов открыт на сегодня до 11:00. На завтра после 11:00.</b><br>"
+            f"<small>Доступно: {start.strftime('%d.%m %H:%M')} — {end.strftime('%d.%m %H:%M')}. Сейчас: {now_.strftime('%d.%m %H:%M')}.</small></p>"
             f"<p><a href='/'>Назад / Back</a></p>"
         ), 403
 
@@ -1317,7 +1257,7 @@ def order():
     drink_code = (request.form.get("drink", "") or "").strip()
     if drink_code not in DRINK_PRICE:
         drink_code = ""
-    drink_label = DRINK_LABEL.get(drink_code, "") if drink_code else None
+    drink_label_val = DRINK_LABEL.get(drink_code, "") if drink_code else None
     drink_price = float(DRINK_PRICE.get(drink_code, 0.0))
 
     bread = (request.form.get("bread", "") or "").strip() or None
@@ -1326,7 +1266,7 @@ def order():
     if not name or not soup or not phone_norm:
         return html_page("<p class='danger'>Ошибка: имя, телефон и суп обязательны / Name, phone and soup are required.</p><p><a href='/'>Назад / Back</a></p>"), 400
 
-    option_code, base_price, err = compute_option_base_price(zakuska, soup, hot, dessert, office, d)
+    option_code, base_price, err = compute_option_base_price(zakuska, soup, hot, dessert, d)
     if err:
         return html_page(f"<p class='danger'>Ошибка: {err}</p><p><a href='/'>Назад / Back</a></p>"), 400
 
@@ -1339,33 +1279,15 @@ def order():
 
         cnt = conn.execute(
             "SELECT COUNT(*) as c FROM orders WHERE office=? AND order_date=? AND status='active'",
-            (office, d.isoformat()),
+            (OFFICE, d.isoformat()),
         ).fetchone()["c"]
         if cnt >= MAX_PER_DAY:
             conn.execute("ROLLBACK")
             return html_page("<p class='danger'><b>Заказы на выбранную дату временно недоступны.</b><br><small>Orders are temporarily unavailable for this date.</small></p><p><a href='/'>Назад / Back</a></p>"), 409
 
-        existing = conn.execute(
-            "SELECT * FROM orders WHERE office=? AND order_date=? AND phone_norm=? AND status='active'",
-            (office, d.isoformat(), phone_norm),
-        ).fetchone()
-        if existing:
-            conn.execute("ROLLBACK")
-            return html_page(
-                f"""
-                <h2 class="danger">⛔ Заказ уже существует / Order already exists</h2>
-                <div class="card">
-                  <p>На этот телефон уже оформлен активный заказ на <b>{d.isoformat()}</b> ({office}).</p>
-                  <p><small>An active order already exists for this phone on <b>{d.isoformat()}</b> ({office}).</small></p>
-                  <p><span class="pill">Номер / Code: {existing['order_code']}</span>
-                     <span class="pill">Итого / Total: {existing['price_eur']}€</span></p>
-                  <p><a href="/edit?office={office}&date={d.isoformat()}&phone={phone_raw}">Открыть / Open /edit</a></p>
-                </div>
-                <p><a href="/">Назад / Back</a></p>
-                """
-            ), 409
+        # ✅ Разрешаем два заказа с одного телефона — убрана проверка на дубль
 
-        order_code = generate_order_code(conn, office, d)
+        order_code = generate_order_code(conn, d)
 
         conn.execute(
             """
@@ -1380,10 +1302,10 @@ def order():
             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """,
             (
-                order_code, office, d.isoformat(), floor,
+                order_code, OFFICE, d.isoformat(), floor,
                 name, phone_raw, phone_norm,
                 zakuska, soup, hot, dessert,
-                drink_code or None, drink_label, drink_price if drink_code else None,
+                drink_code or None, drink_label_val, drink_price if drink_code else None,
                 bread,
                 option_code, float(total_price), comment,
                 "active", datetime.utcnow().isoformat()
@@ -1395,16 +1317,15 @@ def order():
         conn.close()
 
     opt_human = {"opt1": "Опция 1 / Option 1", "opt2": "Опция 2 / Option 2", "opt3": "Опция 3 / Option 3"}[option_code]
-    drink_line = f"{drink_label} (+{drink_price}€)" if drink_code else "—"
-
-    floor_line = f"{floor}" if floor else "—"
+    drink_line = f"{drink_label_val} (+{drink_price}€)" if drink_code else "—"
+    floor_line = floor or "—"
 
     return html_page(
         f"""
       <h2>✅ Заказ принят / Order confirmed</h2>
       <div class="card">
         <p><span class="pill"><b>{order_code}</b></span></p>
-        <p><b>{name}</b> — {office} — <span class="muted">{phone_raw}</span></p>
+        <p><b>{name}</b> — {OFFICE} — <span class="muted">{phone_raw}</span></p>
         <p>Этаж / Floor: <b>{floor_line}</b></p>
         <p>Дата доставки / Delivery date: <b>{d.isoformat()}</b> (13:00)</p>
         <p><span class="pill">{opt_human}</span><span class="pill">Итого / Total: {total_price}€</span></p>
@@ -1417,7 +1338,7 @@ def order():
           <li>Хлеб / Bread: {bread or "—"}</li>
         </ul>
         <p class="muted">Комментарий / Notes: {comment or "—"}</p>
-        <p><a class="btn-secondary" href="/edit?office={office}&date={d.isoformat()}&phone={phone_raw}">Изменить / отменить / Edit / cancel</a></p>
+        <p><a class="btn-secondary" href="/edit?date={d.isoformat()}&phone={phone_raw}">Изменить / отменить / Edit / cancel</a></p>
       </div>
       <p><a href="/">Новый заказ / New order</a></p>
     """
@@ -1431,10 +1352,6 @@ def order():
 def edit_get():
     default_date = compute_default_date()
 
-    office = request.args.get("office", OFFICES[0])
-    if office not in OFFICES:
-        office = OFFICES[0]
-
     d_str = request.args.get("date", default_date.isoformat())
     try:
         d = date.fromisoformat(d_str)
@@ -1444,47 +1361,71 @@ def edit_get():
     phone_raw = (request.args.get("phone", "") or "").strip()
     phone_norm = normalize_phone(phone_raw) if phone_raw else ""
 
+    # ✅ Поиск по коду заказа или телефону (для двух заказов с одного номера)
+    order_code_search = (request.args.get("code", "") or "").strip()
+
     found = None
     conn = db()
     ensure_columns(conn)
-    if phone_norm:
+    if order_code_search:
         found = conn.execute(
-            "SELECT * FROM orders WHERE office=? AND order_date=? AND phone_norm=? AND status='active'",
-            (office, d.isoformat(), phone_norm),
+            "SELECT * FROM orders WHERE order_code=? AND status='active'",
+            (order_code_search,),
         ).fetchone()
+    elif phone_norm:
+        # Если с одного телефона два заказа — показываем список
+        rows = conn.execute(
+            "SELECT * FROM orders WHERE office=? AND order_date=? AND phone_norm=? AND status='active'",
+            (OFFICE, d.isoformat(), phone_norm),
+        ).fetchall()
+        if len(rows) == 1:
+            found = rows[0]
+        elif len(rows) > 1:
+            conn.close()
+            ok_time, start, end, now_ = validate_order_time(d)
+            items_html = "".join([
+                f"<p><a href='/edit?date={d.isoformat()}&code={r['order_code']}'>"
+                f"<b>{r['order_code']}</b> — {r['name']} — {r['floor'] or '—'} — {r['soup']}"
+                f"</a></p>"
+                for r in rows
+            ])
+            body = f"""
+<h1>Выберите заказ / Choose order</h1>
+<div class="card">
+  <p>На {d.isoformat()} найдено несколько заказов с этого телефона:</p>
+  {items_html}
+  <p><a href="/edit">← Назад / Back</a></p>
+</div>
+"""
+            return html_page(body)
     conn.close()
 
     ok_time, start, end, now_ = validate_order_time(d)
 
-    # в edit/admin офисы НЕ отключаем в селекте (чтобы смотреть старые заказы)
-    office_opts = "".join([f"<option value='{o}' {'selected' if o==office else ''}>{o}</option>" for o in OFFICES])
-
-    drink_options = ""
-    for (k, lbl, _) in DRINKS:
-        sel = ""
-        if found and (found["drink_code"] or "") == (k or ""):
-            sel = "selected"
-        drink_options += f"<option value='{k}' {sel}>{lbl}</option>"
+    soups = get_soups_list()
+    hot_items = hot_menu_with_special(d)
 
     if found:
-        hot_items = hot_menu_with_special(office, d)
-
         floor_edit_block = ""
-        if office in FLOORS_BY_OFFICE:
-            fval = (found["floor"] or "")
-            floor_edit_block = f"""
-            <div class="row" style="margin-top:10px;">
-              <div>
-                <label>Этаж (ALAMEDA) / Floor</label>
-                <select name="floor" required>
-                  <option value="">— choose floor —</option>
-                  <option value="1st floor" {"selected" if fval=="1st floor" else ""}>1st floor</option>
-                  <option value="6th floor" {"selected" if fval=="6th floor" else ""}>6th floor</option>
-                </select>
-              </div>
-              <div></div>
-            </div>
-            """
+        fval = (found["floor"] or "")
+        floor_edit_block = f"""
+        <div class="row" style="margin-top:10px;">
+          <div>
+            <label>Этаж / Floor</label>
+            <select name="floor" required>
+              <option value="">— choose floor —</option>
+              <option value="1st floor" {"selected" if fval=="1st floor" else ""}>1 этаж / 1st floor</option>
+              <option value="6th floor" {"selected" if fval=="6th floor" else ""}>6 этаж / 6th floor</option>
+            </select>
+          </div>
+          <div></div>
+        </div>
+        """
+
+        drink_options = ""
+        for (k, lbl, _) in DRINKS:
+            sel = "selected" if (found["drink_code"] or "") == (k or "") else ""
+            drink_options += f"<option value='{k}' {sel}>{lbl}</option>"
 
         body = f"""
         <h1>Изменить / отменить заказ<br><small>Edit / cancel order</small></h1>
@@ -1492,16 +1433,15 @@ def edit_get():
           <p><span class="pill"><b>{found['order_code']}</b></span>
              <span class="pill">Доставка / Delivery: {d.isoformat()} 13:00</span></p>
 
-          <p class="muted">Окно изменений / Edit window:
+          <p class="muted">Окно изменений:
             <b>{start.strftime('%d.%m %H:%M')}</b> — <b>{end.strftime('%d.%m %H:%M')}</b>.
-            Сейчас / Now: <b>{now_.strftime('%d.%m %H:%M')}</b>.
+            Сейчас: <b>{now_.strftime('%d.%m %H:%M')}</b>.
           </p>
-          {"<p class='danger'><b>Сейчас окно закрыто — изменения/отмена недоступны.</b><br><small>Window is closed — edit/cancel unavailable.</small></p>" if not ok_time else ""}
+          {"<p class='danger'><b>Сейчас окно закрыто — изменения/отмена недоступны.</b><br><small>Window is closed.</small></p>" if not ok_time else ""}
 
           <form method="post" action="/edit">
-            <input type="hidden" name="office" value="{office}">
             <input type="hidden" name="order_date" value="{d.isoformat()}">
-            <input type="hidden" name="phone" value="{found['phone_raw']}">
+            <input type="hidden" name="order_code" value="{found['order_code']}">
 
             <label>Как вас зовут / Your name</label>
             <input name="name" value="{found['name']}" required>
@@ -1520,7 +1460,7 @@ def edit_get():
                 <label>Суп / Soup</label>
                 <select name="soup" required>
                   <option value="">— выбери суп / choose soup —</option>
-                  {options_html(MENU["soup"])}
+                  {options_html(soups)}
                 </select>
               </div>
             </div>
@@ -1542,11 +1482,11 @@ def edit_get():
               </div>
             </div>
 
-            <label>Напиток / Drink </label>
+            <label>Напиток / Drink</label>
             <select name="drink">{drink_options}</select>
             <small>оплачивается отдельно / not included</small>
 
-            <label style="margin-top:16px;">Хлеб / Bread </label>
+            <label style="margin-top:16px;">Хлеб / Bread</label>
             <select name="bread">
               <option value="" {"selected" if not found["bread"] else ""}>— без хлеба / no bread —</option>
               {options_html(BREAD_OPTIONS)}
@@ -1559,9 +1499,8 @@ def edit_get():
           </form>
 
           <form method="post" action="/cancel" style="margin-top:12px;">
-            <input type="hidden" name="office" value="{office}">
             <input type="hidden" name="order_date" value="{d.isoformat()}">
-            <input type="hidden" name="phone" value="{found['phone_raw']}">
+            <input type="hidden" name="order_code" value="{found['order_code']}">
             <button type="submit" class="btn-danger">Отменить заказ / Cancel</button>
           </form>
 
@@ -1573,29 +1512,24 @@ def edit_get():
     body = f"""
 <h1>Изменить / отменить заказ<br><small>Edit / cancel order</small></h1>
 
-<div class="card volga-card">
-  <form method="get" action="/edit" class="volga-form">
+<div class="card">
+  <form method="get" action="/edit">
     <div class="row">
-      <div>
-        <label>Офис / Office</label>
-        <select name="office" required>{office_opts}</select>
-      </div>
       <div>
         <label>Дата доставки / Delivery date</label>
         <input type="date" name="date" value="{d.isoformat()}" required>
       </div>
+      <div>
+        <label>Телефон (как в заказе) / Phone</label>
+        <input name="phone" value="{phone_raw}" placeholder="" required>
+      </div>
     </div>
-
-    <label>Телефон (как в заказе) / Phone (as in order)</label>
-    <input name="phone" value="{phone_raw}" placeholder="" required>
-
-    <button type="submit" class="btn-primary">
-      Найти заказ / Find order
-    </button>
+    <small style="margin-top:6px;">Если два заказа — выберите нужный из списка.</small>
+    <button type="submit" class="btn-primary">Найти заказ / Find order</button>
   </form>
 
-  <p class="muted">Если заказ не найден — проверь офис, дату и телефон.<br>
-  <small>If not found — check office, date and phone.</small></p>
+  <p class="muted" style="margin-top:12px;">Если заказ не найден — проверь дату и телефон.<br>
+  <small>If not found — check date and phone.</small></p>
 
   <p><a href="/">← На главную / Home</a></p>
 </div>
@@ -1605,10 +1539,6 @@ def edit_get():
 
 @app.post("/edit")
 def edit_post():
-    office = (request.form.get("office", "") or "").strip()
-    if office not in OFFICES:
-        return html_page("<p class='danger'>Ошибка: неизвестный офис / Unknown office.</p><p><a href='/edit'>Назад / Back</a></p>"), 400
-
     order_date = (request.form.get("order_date", "") or "").strip()
     try:
         d = date.fromisoformat(order_date)
@@ -1618,17 +1548,17 @@ def edit_post():
     ok_time, start, end, now_ = validate_order_time(d)
     if not ok_time:
         if is_closed_day(d):
-            return html_page("<p class='danger'><b>В понедельник мы не работаем.</b><br><small>We are closed on Mondays.</small></p><p><a href='/edit'>Назад / Back</a></p>"), 403
+            return html_page("<p class='danger'><b>В понедельник мы не работаем.</b></p><p><a href='/edit'>Назад</a></p>"), 403
         return html_page(
             f"<p class='danger'><b>Окно редактирования закрыто.</b><br>"
             f"<small>Окно: {start.strftime('%d.%m %H:%M')} — {end.strftime('%d.%m %H:%M')}. Сейчас: {now_.strftime('%d.%m %H:%M')}.</small></p>"
             f"<p><a href='/edit'>Назад / Back</a></p>"
         ), 403
 
-    phone_raw = (request.form.get("phone", "") or "").strip()
-    phone_norm = normalize_phone(phone_raw)
-    if not phone_norm:
-        return html_page("<p class='danger'>Ошибка: телефон обязателен / Phone is required.</p><p><a href='/edit'>Назад / Back</a></p>"), 400
+    # ✅ Находим по коду заказа
+    order_code_val = (request.form.get("order_code", "") or "").strip()
+    if not order_code_val:
+        return html_page("<p class='danger'>Ошибка: код заказа не указан.</p><p><a href='/edit'>Назад</a></p>"), 400
 
     name = (request.form.get("name", "") or "").strip()
     zakuska = (request.form.get("zakuska", "") or "").strip() or None
@@ -1636,27 +1566,26 @@ def edit_post():
     hot = (request.form.get("hot", "") or "").strip() or None
     dessert = (request.form.get("dessert", "") or "").strip() or None
 
-    # ✅ этаж (если нужен)
     floor = (request.form.get("floor", "") or "").strip() or None
-    ok_floor, floor = validate_floor_for_office(office, floor)
+    ok_floor, floor = validate_floor_for_office(floor)
     if not ok_floor:
-        return html_page("<p class='danger'>Выберите этаж (ALAMEDA) / Please choose floor (ALAMEDA).</p><p><a href='/edit'>Назад / Back</a></p>"), 400
+        return html_page("<p class='danger'>Выберите этаж / Please choose floor.</p><p><a href='/edit'>Назад / Back</a></p>"), 400
 
     drink_code = (request.form.get("drink", "") or "").strip()
     if drink_code not in DRINK_PRICE:
         drink_code = ""
-    drink_label = DRINK_LABEL.get(drink_code, "") if drink_code else None
+    drink_label_val = DRINK_LABEL.get(drink_code, "") if drink_code else None
     drink_price = float(DRINK_PRICE.get(drink_code, 0.0))
 
     bread = (request.form.get("bread", "") or "").strip() or None
     comment = (request.form.get("comment", "") or "").strip() or None
 
     if not name or not soup:
-        return html_page("<p class='danger'>Ошибка: имя и суп обязательны / Name and soup are required.</p><p><a href='/edit'>Назад / Back</a></p>"), 400
+        return html_page("<p class='danger'>Ошибка: имя и суп обязательны.</p><p><a href='/edit'>Назад</a></p>"), 400
 
-    option_code, base_price, err = compute_option_base_price(zakuska, soup, hot, dessert, office, d)
+    option_code, base_price, err = compute_option_base_price(zakuska, soup, hot, dessert, d)
     if err:
-        return html_page(f"<p class='danger'>Ошибка: {err}</p><p><a href='/edit'>Назад / Back</a></p>"), 400
+        return html_page(f"<p class='danger'>Ошибка: {err}</p><p><a href='/edit'>Назад</a></p>"), 400
 
     total_price = compute_total_price(base_price, drink_code)
 
@@ -1664,13 +1593,13 @@ def edit_post():
     ensure_columns(conn)
 
     existing = conn.execute(
-        "SELECT * FROM orders WHERE office=? AND order_date=? AND phone_norm=? AND status='active'",
-        (office, d.isoformat(), phone_norm),
+        "SELECT * FROM orders WHERE order_code=? AND status='active'",
+        (order_code_val,),
     ).fetchone()
 
     if not existing:
         conn.close()
-        return html_page("<p class='danger'>Активный заказ не найден / Active order not found.</p><p><a href='/edit'>Назад / Back</a></p>"), 404
+        return html_page("<p class='danger'>Активный заказ не найден / Active order not found.</p><p><a href='/edit'>Назад</a></p>"), 404
 
     conn.execute(
         """
@@ -1682,7 +1611,7 @@ def edit_post():
         """,
         (
             name, floor, zakuska, soup, hot, dessert,
-            drink_code or None, drink_label, drink_price if drink_code else None,
+            drink_code or None, drink_label_val, drink_price if drink_code else None,
             bread, option_code, float(total_price), comment,
             existing["id"],
         ),
@@ -1691,7 +1620,7 @@ def edit_post():
     conn.close()
 
     opt_human = {"opt1": "Опция 1 / Option 1", "opt2": "Опция 2 / Option 2", "opt3": "Опция 3 / Option 3"}[option_code]
-    drink_line = f"{drink_label} (+{drink_price}€)" if drink_code else "—"
+    drink_line = f"{drink_label_val} (+{drink_price}€)" if drink_code else "—"
     floor_line = floor or "—"
 
     return html_page(
@@ -1699,7 +1628,7 @@ def edit_post():
       <h2>✅ Изменения сохранены / Saved</h2>
       <div class="card">
         <p><span class="pill"><b>{existing['order_code']}</b></span></p>
-        <p><b>{name}</b> — {office} — <span class="muted">{existing['phone_raw']}</span></p>
+        <p><b>{name}</b> — {OFFICE} — <span class="muted">{existing['phone_raw']}</span></p>
         <p>Этаж / Floor: <b>{floor_line}</b></p>
         <p>Дата доставки / Delivery date: <b>{d.isoformat()}</b> (13:00)</p>
         <p><span class="pill">{opt_human}</span><span class="pill">Итого / Total: {total_price}€</span></p>
@@ -1720,42 +1649,37 @@ def edit_post():
 
 @app.post("/cancel")
 def cancel_post():
-    office = (request.form.get("office", "") or "").strip()
-    if office not in OFFICES:
-        return html_page("<p class='danger'>Ошибка: неизвестный офис / Unknown office.</p><p><a href='/edit'>Назад / Back</a></p>"), 400
-
     order_date = (request.form.get("order_date", "") or "").strip()
     try:
         d = date.fromisoformat(order_date)
     except ValueError:
-        return html_page("<p class='danger'>Ошибка: неверная дата / Invalid date.</p><p><a href='/edit'>Назад / Back</a></p>"), 400
+        return html_page("<p class='danger'>Ошибка: неверная дата / Invalid date.</p><p><a href='/edit'>Назад</a></p>"), 400
 
     ok_time, start, end, now_ = validate_order_time(d)
     if not ok_time:
         if is_closed_day(d):
-            return html_page("<p class='danger'><b>В понедельник мы не работаем.</b><br><small>We are closed on Mondays.</small></p><p><a href='/edit'>Назад / Back</a></p>"), 403
+            return html_page("<p class='danger'><b>В понедельник мы не работаем.</b></p><p><a href='/edit'>Назад</a></p>"), 403
         return html_page(
             f"<p class='danger'><b>Окно отмены закрыто.</b><br>"
             f"<small>Окно: {start.strftime('%d.%m %H:%M')} — {end.strftime('%d.%m %H:%M')}. Сейчас: {now_.strftime('%d.%m %H:%M')}.</small></p>"
             f"<p><a href='/edit'>Назад / Back</a></p>"
         ), 403
 
-    phone_raw = (request.form.get("phone", "") or "").strip()
-    phone_norm = normalize_phone(phone_raw)
-    if not phone_norm:
-        return html_page("<p class='danger'>Ошибка: телефон обязателен / Phone is required.</p><p><a href='/edit'>Назад / Back</a></p>"), 400
+    order_code_val = (request.form.get("order_code", "") or "").strip()
+    if not order_code_val:
+        return html_page("<p class='danger'>Ошибка: код заказа не указан.</p><p><a href='/edit'>Назад</a></p>"), 400
 
     conn = db()
     ensure_columns(conn)
 
     existing = conn.execute(
-        "SELECT * FROM orders WHERE office=? AND order_date=? AND phone_norm=? AND status='active'",
-        (office, d.isoformat(), phone_norm),
+        "SELECT * FROM orders WHERE order_code=? AND status='active'",
+        (order_code_val,),
     ).fetchone()
 
     if not existing:
         conn.close()
-        return html_page("<p class='danger'>Активный заказ не найден / Active order not found.</p><p><a href='/edit'>Назад / Back</a></p>"), 404
+        return html_page("<p class='danger'>Активный заказ не найден / Active order not found.</p><p><a href='/edit'>Назад</a></p>"), 404
 
     conn.execute("UPDATE orders SET status='cancelled' WHERE id=?", (existing["id"],))
     conn.commit()
@@ -1766,7 +1690,7 @@ def cancel_post():
       <h2>🗑 Заказ отменён / Order cancelled</h2>
       <div class="card">
         <p><span class="pill"><b>{existing['order_code']}</b></span></p>
-        <p><b>{existing['name']}</b> — {office} — <span class="muted">{existing['phone_raw']}</span></p>
+        <p><b>{existing['name']}</b> — {OFFICE} — <span class="muted">{existing['phone_raw']}</span></p>
         <p>Дата доставки / Delivery date: <b>{d.isoformat()}</b> (13:00)</p>
       </div>
       <p><a href="/">← На главную / Home</a></p>
@@ -1775,7 +1699,7 @@ def cancel_post():
 
 
 # ===========================
-# Admin v2 (Grouped by Floor) + Special management + CSV + Print
+# Admin
 # ===========================
 
 def _ru_only(s: str) -> str:
@@ -1788,21 +1712,17 @@ SHORT = {
     "Икра из баклажанов": "Икра",
     "Паштет из куриной печени": "Паштет",
     "Шуба": "Шуба",
-
     "Борщ": "Борщ",
     "Солянка сборная мясная": "Солянка",
     "Куриный суп с лапшой и яйцом": "Кур. суп",
-
     "Куриные котлеты с пюре": "Котл+пюре",
     "Куриные котлеты с гречкой": "Котл+греча",
     "Вареники с картошкой": "Вареники",
     "Пельмени со сметаной": "Пельмени",
     "Плов с бараниной (+3€)": "Плов",
-
     "Торт Наполеон": "Наполеон",
     "Пирожное Картошка": "Картошка",
     "Трубочка со сгущенкой": "Трубочка",
-
     "Белый": "Хлеб белый",
     "Чёрный": "Хлеб чёрный",
 }
@@ -1817,14 +1737,11 @@ def _fmt_money(x):
     except Exception:
         return f"{x}€"
 
-def _floor_norm(f: str | None) -> str:
+def _floor_norm(f) -> str:
     f = (f or "").strip()
-    if not f:
-        return "Без этажа"
-    return f
+    return f if f else "Без этажа"
 
 def _floor_sort_key(k: str):
-    # Поддержим оба формата
     kk = (k or "").lower()
     if "1st" in kk or "1 этаж" in kk:
         return (0, 1)
@@ -1890,13 +1807,11 @@ def _summary_counts(rows):
     for r in rows:
         if r["option_code"] in opt_counts:
             opt_counts[r["option_code"]] += 1
-
         for k in ["soup", "zakuska", "hot", "dessert", "bread"]:
             v = r[k]
             if v:
                 vv = _short_name(v)
                 dish_counts[vv] = dish_counts.get(vv, 0) + 1
-
         if r["drink_label"]:
             dd = _ru_only(r["drink_label"])
             drink_counts[dd] = drink_counts.get(dd, 0) + 1
@@ -1933,11 +1848,9 @@ def admin_v2():
     if not check_admin():
         return html_page("<h2>⛔ Нет доступа</h2><p>Нужен token.</p>"), 403
 
-    office = request.args.get("office", OFFICES[0])
-    if office not in OFFICES:
-        office = OFFICES[0]
-
-    d_str = request.args.get("date", date.today().isoformat())
+    # ✅ По умолчанию — сегодняшняя дата
+    today_str = date.today().isoformat()
+    d_str = request.args.get("date", today_str)
     try:
         d = date.fromisoformat(d_str)
     except ValueError:
@@ -1952,7 +1865,7 @@ def admin_v2():
         WHERE office=? AND order_date=? AND status='active'
         ORDER BY created_at ASC
         """,
-        (office, d.isoformat()),
+        (OFFICE, d.isoformat()),
     ).fetchall()
 
     cancelled_rows = conn.execute(
@@ -1961,7 +1874,7 @@ def admin_v2():
         WHERE office=? AND order_date=? AND status='cancelled'
         ORDER BY created_at ASC
         """,
-        (office, d.isoformat()),
+        (OFFICE, d.isoformat()),
     ).fetchall()
 
     conn.close()
@@ -1969,9 +1882,6 @@ def admin_v2():
     active_groups = _active_by_floor(active_rows)
     opt_counts, dish_counts, drink_counts = _summary_counts(active_rows)
 
-    office_opts = "".join([f"<option value='{o}' {'selected' if o==office else ''}>{o}</option>" for o in OFFICES])
-
-    # Блок активных, сгруппированных по этажу
     active_html = ""
     for floor_name in sorted(active_groups.keys(), key=_floor_sort_key):
         rr = active_groups[floor_name]
@@ -1981,55 +1891,45 @@ def admin_v2():
             <h3 style="margin:0;">Активные — {floor_name}</h3>
             <div class="muted" style="font-weight:800;">{len(rr)} шт.</div>
           </div>
-
           <div class="no-print" style="margin-top:10px; display:flex; gap:10px; flex-wrap:wrap;">
-            <a class="btn-primary" href="/admin/print?office={office}&date={d.isoformat()}&floor={floor_name}&token={ADMIN_TOKEN}">
+            <a class="btn-primary" href="/admin/print?date={d.isoformat()}&floor={floor_name}&token={ADMIN_TOKEN}">
               🖨 Печать: {floor_name}
             </a>
           </div>
-
           {_rows_table_v2(rr)}
         </div>
         """
 
     body = f"""
-    <h1>Админка</h1>
+    <h1>Админка — {OFFICE}</h1>
 
     <div class="card">
       <form method="get" action="/admin">
         <input type="hidden" name="token" value="{ADMIN_TOKEN}">
         <div class="row">
           <div>
-            <label>Офис</label>
-            <select name="office">{office_opts}</select>
-          </div>
-          <div>
             <label>Дата</label>
             <input type="date" name="date" value="{d.isoformat()}">
           </div>
+          <div></div>
         </div>
         <button class="btn-primary" type="submit">Показать</button>
       </form>
 
       <p style="margin-top:14px;">
-        <a href="/export.csv?office={office}&date={d.isoformat()}&token={ADMIN_TOKEN}">
-          ⬇️ Выгрузка CSV (активные)
-        </a>
+        <a href="/export.csv?date={d.isoformat()}&token={ADMIN_TOKEN}">⬇️ CSV (активные)</a>
         &nbsp;|&nbsp;
-        <a href="/admin/print?office={office}&date={d.isoformat()}&token={ADMIN_TOKEN}">
-          🖨 Печать активных (все)
-        </a>
+        <a href="/admin/print?date={d.isoformat()}&token={ADMIN_TOKEN}">🖨 Печать всех</a>
         &nbsp;|&nbsp;
-        <a href="/admin/summary?office={office}&date={d.isoformat()}&token={ADMIN_TOKEN}">
-          🧾 Сводка (печать)
-        </a>
+        <a href="/admin/summary?date={d.isoformat()}&token={ADMIN_TOKEN}">🧾 Сводка</a>
         &nbsp;|&nbsp;
-        <a href="/admin/specials?office={office}&date={d.isoformat()}&token={ADMIN_TOKEN}">
-          ⭐ Блюдо недели (управление)
-        </a>
+        <a href="/admin/specials?date={d.isoformat()}&token={ADMIN_TOKEN}">⭐ Блюдо недели</a>
+        &nbsp;|&nbsp;
+        <a href="/admin/soups?token={ADMIN_TOKEN}">🍲 Управление супами</a>
       </p>
 
       <p>
+        <span class="pill">Всего активных: {len(active_rows)}</span>
         <span class="pill">Опция 1: {opt_counts.get('opt1',0)}</span>
         <span class="pill">Опция 2: {opt_counts.get('opt2',0)}</span>
         <span class="pill">Опция 3: {opt_counts.get('opt3',0)}</span>
@@ -2049,13 +1949,17 @@ def admin_v2():
     return html_page(body)
 
 
-# --- Summary page (kitchen/bar) ---
+# --- Summary ---
 ADMIN_SUMMARY_CSS = """
 <style>
   @media print {
     .no-print { display:none !important; }
-    body { margin:0; }
-    .card { border:none; margin:0; padding:0; }
+    body { margin:0; background:#fff !important; }
+    .card { border:none; margin:0; padding:0; background:#fff !important; }
+    table, th, td { background:#fff !important; border-color:#000 !important; }
+    .admin-table th { background:#fff !important; color:#000 !important; }
+    .admin-table td { color:#000 !important; }
+    * { -webkit-print-color-adjust: economy; print-color-adjust: economy; }
     a { color:#000; text-decoration:none; }
   }
 </style>
@@ -2066,10 +1970,6 @@ def admin_summary_v2():
     if not check_admin():
         return html_page("<h2>⛔ Нет доступа</h2><p>Нужен token.</p>"), 403
 
-    office = request.args.get("office", OFFICES[0])
-    if office not in OFFICES:
-        office = OFFICES[0]
-
     d_str = request.args.get("date", date.today().isoformat())
     try:
         d = date.fromisoformat(d_str)
@@ -2078,27 +1978,12 @@ def admin_summary_v2():
 
     conn = db()
     ensure_columns(conn)
-
     rows = conn.execute(
-        """
-        SELECT option_code, soup, zakuska, hot, dessert, bread, drink_label
-        FROM orders
-        WHERE office=? AND order_date=? AND status='active'
-        """,
-        (office, d.isoformat()),
+        "SELECT option_code, soup, zakuska, hot, dessert, bread, drink_label FROM orders WHERE office=? AND order_date=? AND status='active'",
+        (OFFICE, d.isoformat()),
     ).fetchall()
     conn.close()
 
-    # превратим в “как будто полные rows”
-    fake = []
-    for r in rows:
-        fake.append({
-            "option_code": r["option_code"],
-            "soup": r["soup"], "zakuska": r["zakuska"], "hot": r["hot"], "dessert": r["dessert"], "bread": r["bread"],
-            "drink_label": r["drink_label"],
-        })
-    # быстро переиспользуем summary_counts, но он ждёт dict-like с ключами.
-    # проще: пересчитаем здесь напрямую.
     dish_counts = {}
     drink_counts = {}
     for r in rows:
@@ -2114,28 +1999,20 @@ def admin_summary_v2():
     body = f"""
     {ADMIN_SUMMARY_CSS}
     <h1>Сводка (кухня/бар)</h1>
-
     <div class="card">
-      <p><b>Офис:</b> {office} &nbsp; | &nbsp; <b>Дата:</b> {d.isoformat()}</p>
-
+      <p><b>Офис:</b> {OFFICE} &nbsp; | &nbsp; <b>Дата:</b> {d.isoformat()}</p>
       <div class="no-print" style="margin-top:12px; display:flex; gap:10px; flex-wrap:wrap;">
-        <a class="btn-primary" href="/admin?office={office}&date={d.isoformat()}&token={ADMIN_TOKEN}">← Назад в админку</a>
+        <a class="btn-primary" href="/admin?date={d.isoformat()}&token={ADMIN_TOKEN}">← Назад в админку</a>
         <button class="btn-primary" type="button" onclick="window.print()">Печать / PDF</button>
       </div>
-
-      <div style="margin-top:16px;">
-        {_simple_table("Блюда (активные)", dish_counts)}
-      </div>
-
-      <div style="margin-top:18px;">
-        {_simple_table("Напитки (активные)", drink_counts)}
-      </div>
+      <div style="margin-top:16px;">{_simple_table("Блюда (активные)", dish_counts)}</div>
+      <div style="margin-top:18px;">{_simple_table("Напитки (активные)", drink_counts)}</div>
     </div>
     """
     return html_page(body)
 
 
-# --- Print active (all or by floor) ---
+# --- Print ---
 ADMIN_PRINT_CSS = """
 <style>
   @media print{
@@ -2144,12 +2021,9 @@ ADMIN_PRINT_CSS = """
     table, th, td{ background:#fff !important; }
     .admin-table th{ background:#fff !important; }
     *{ -webkit-print-color-adjust: economy; print-color-adjust: economy; }
-
     body{ font-size:11px; }
     .admin-table{ font-size:10px; }
     .admin-table th, .admin-table td{ padding:4px 6px; }
-    .admin-table td:last-child{ max-width:260px; white-space:normal; word-break:break-word; }
-
     .no-print, button, a{ display:none !important; }
   }
 </style>
@@ -2159,10 +2033,6 @@ ADMIN_PRINT_CSS = """
 def admin_print_active_v2():
     if not check_admin():
         return html_page("<h2>⛔ Нет доступа</h2><p>Нужен token.</p>"), 403
-
-    office = request.args.get("office", OFFICES[0])
-    if office not in OFFICES:
-        office = OFFICES[0]
 
     d_str = request.args.get("date", date.today().isoformat())
     try:
@@ -2177,23 +2047,14 @@ def admin_print_active_v2():
 
     if floor_filter:
         rows = conn.execute(
-            """
-            SELECT * FROM orders
-            WHERE office=? AND order_date=? AND status='active' AND COALESCE(floor,'')=?
-            ORDER BY created_at ASC
-            """,
-            (office, d.isoformat(), floor_filter if floor_filter != "Без этажа" else ""),
+            "SELECT * FROM orders WHERE office=? AND order_date=? AND status='active' AND COALESCE(floor,'')=? ORDER BY created_at ASC",
+            (OFFICE, d.isoformat(), floor_filter if floor_filter != "Без этажа" else ""),
         ).fetchall()
     else:
         rows = conn.execute(
-            """
-            SELECT * FROM orders
-            WHERE office=? AND order_date=? AND status='active'
-            ORDER BY created_at ASC
-            """,
-            (office, d.isoformat()),
+            "SELECT * FROM orders WHERE office=? AND order_date=? AND status='active' ORDER BY created_at ASC",
+            (OFFICE, d.isoformat()),
         ).fetchall()
-
     conn.close()
 
     title = "Печать — активные заказы" + (f" — {floor_filter}" if floor_filter else "")
@@ -2201,31 +2062,23 @@ def admin_print_active_v2():
     body = f"""
     {ADMIN_PRINT_CSS}
     <h1 style="text-align:center;">{title}</h1>
-    <p style="text-align:center; font-weight:800;">
-      Офис: {office} &nbsp; | &nbsp; Дата: {d.isoformat()}
-    </p>
-
+    <p style="text-align:center; font-weight:800;">Офис: {OFFICE} | Дата: {d.isoformat()}</p>
     <div class="card">
       {_rows_table_v2(rows)}
-
       <div class="no-print" style="margin-top:14px; display:flex; gap:10px; flex-wrap:wrap;">
         <button class="btn-primary" type="button" onclick="window.print()">🖨 Печать</button>
-        <a class="btn-danger" href="/admin?office={office}&date={d.isoformat()}&token={ADMIN_TOKEN}">← Назад</a>
+        <a class="btn-danger" href="/admin?date={d.isoformat()}&token={ADMIN_TOKEN}">← Назад</a>
       </div>
     </div>
     """
     return html_page(body)
 
 
-# --- Specials management: list + create + delete ---
+# --- Specials management ---
 @app.get("/admin/specials")
 def admin_specials_get():
     if not check_admin():
         return html_page("<h2>⛔ Нет доступа</h2><p>Нужен token.</p>"), 403
-
-    office = request.args.get("office", OFFICES[0])
-    if office not in OFFICES:
-        office = OFFICES[0]
 
     d_str = request.args.get("date", date.today().isoformat())
     try:
@@ -2235,21 +2088,13 @@ def admin_specials_get():
 
     conn = db()
     rows = conn.execute(
-        """
-        SELECT * FROM weekly_special
-        WHERE office=?
-        ORDER BY id DESC
-        LIMIT 30
-        """,
-        (office,),
+        "SELECT * FROM weekly_special WHERE office=? ORDER BY id DESC LIMIT 30",
+        (OFFICE,),
     ).fetchall()
     conn.close()
 
-    # form defaults
     start_default = d.isoformat()
     end_default = (d + timedelta(days=6)).isoformat()
-
-    office_opts = "".join([f"<option value='{o}' {'selected' if o==office else ''}>{o}</option>" for o in OFFICES])
 
     list_html = ""
     for r in rows:
@@ -2260,48 +2105,25 @@ def admin_specials_get():
           <td>{r['title']}</td>
           <td style="text-align:right;">+{int(r['surcharge_eur'])}€</td>
           <td style="text-align:right;">
-            <form method="post" action="/admin/specials/delete?token={ADMIN_TOKEN}" onsubmit="return confirm('Удалить блюдо недели?');">
+            <form method="post" action="/admin/specials/delete?token={ADMIN_TOKEN}" onsubmit="return confirm('Удалить?');">
               <input type="hidden" name="id" value="{r['id']}">
-              <input type="hidden" name="office" value="{office}">
               <input type="hidden" name="date" value="{d.isoformat()}">
               <button class="btn-danger" type="submit">Удалить</button>
             </form>
           </td>
         </tr>
         """
-
     if not list_html:
         list_html = "<tr><td colspan='5' class='muted'>—</td></tr>"
 
     body = f"""
     <h1>Блюдо недели — управление</h1>
-
     <div class="card">
-      <form method="get" action="/admin/specials">
-        <input type="hidden" name="token" value="{ADMIN_TOKEN}">
-        <div class="row">
-          <div>
-            <label>Офис</label>
-            <select name="office">{office_opts}</select>
-          </div>
-          <div>
-            <label>Дата (для удобства)</label>
-            <input type="date" name="date" value="{d.isoformat()}">
-          </div>
-        </div>
-        <button class="btn-primary" type="submit">Показать</button>
-      </form>
-
-      <p style="margin-top:14px;">
-        <a href="/admin?office={office}&date={d.isoformat()}&token={ADMIN_TOKEN}">← Назад в админку</a>
-      </p>
+      <p><a href="/admin?date={d.isoformat()}&token={ADMIN_TOKEN}">← Назад в админку</a></p>
     </div>
-
     <div class="card">
-      <h3>Создать / обновить (через добавление новой записи)</h3>
+      <h3>Добавить блюдо недели</h3>
       <form method="post" action="/admin/specials/create?token={ADMIN_TOKEN}">
-        <input type="hidden" name="office" value="{office}">
-
         <div class="row">
           <div>
             <label>Начало</label>
@@ -2312,33 +2134,18 @@ def admin_specials_get():
             <input type="date" name="end_date" value="{end_default}" required>
           </div>
         </div>
-
-        <label>Название блюда недели (горячее)</label>
+        <label>Название блюда</label>
         <input name="title" placeholder="Напр. Бефстроганов" required>
-
         <label>Доплата, €</label>
         <input name="surcharge_eur" type="number" min="0" step="1" value="0" required>
-
         <button class="btn-primary" type="submit">Сохранить</button>
       </form>
-      <p class="muted">Мы не “редактируем” старые — мы добавляем новую запись. История сохраняется.</p>
     </div>
-
     <div class="card">
       <h3>Последние 30 записей</h3>
       <table class="admin-table">
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>Период</th>
-            <th>Название</th>
-            <th style="text-align:right;">Доплата</th>
-            <th style="text-align:right;">Действия</th>
-          </tr>
-        </thead>
-        <tbody>
-          {list_html}
-        </tbody>
+        <thead><tr><th>ID</th><th>Период</th><th>Название</th><th style="text-align:right;">Доплата</th><th>Действия</th></tr></thead>
+        <tbody>{list_html}</tbody>
       </table>
     </div>
     """
@@ -2348,11 +2155,7 @@ def admin_specials_get():
 @app.post("/admin/specials/create")
 def admin_specials_create_post():
     if not check_admin():
-        return html_page("<h2>⛔ Нет доступа</h2><p>Нужен token.</p>"), 403
-
-    office = (request.form.get("office", "") or "").strip()
-    if office not in OFFICES:
-        return html_page("<p class='danger'>Ошибка: неизвестный офис.</p>"), 400
+        return html_page("<h2>⛔ Нет доступа</h2>"), 403
 
     try:
         start_date = date.fromisoformat((request.form.get("start_date", "") or "").strip())
@@ -2361,7 +2164,7 @@ def admin_specials_create_post():
         return html_page("<p class='danger'>Ошибка: неверные даты.</p>"), 400
 
     if end_date < start_date:
-        return html_page("<p class='danger'>Ошибка: дата конца раньше даты начала.</p>"), 400
+        return html_page("<p class='danger'>Ошибка: дата конца раньше начала.</p>"), 400
 
     title = (request.form.get("title", "") or "").strip()
     if not title:
@@ -2376,22 +2179,19 @@ def admin_specials_create_post():
 
     conn = db()
     conn.execute(
-        """
-        INSERT INTO weekly_special(office, start_date, end_date, title, surcharge_eur, created_at)
-        VALUES (?,?,?,?,?,?)
-        """,
-        (office, start_date.isoformat(), end_date.isoformat(), title, surcharge, datetime.utcnow().isoformat()),
+        "INSERT INTO weekly_special(office, start_date, end_date, title, surcharge_eur, created_at) VALUES (?,?,?,?,?,?)",
+        (OFFICE, start_date.isoformat(), end_date.isoformat(), title, surcharge, datetime.utcnow().isoformat()),
     )
     conn.commit()
     conn.close()
 
-    return redirect(f"/admin/specials?office={office}&date={start_date.isoformat()}&token={ADMIN_TOKEN}")
+    return redirect(f"/admin/specials?date={start_date.isoformat()}&token={ADMIN_TOKEN}")
 
 
 @app.post("/admin/specials/delete")
 def admin_specials_delete_post():
     if not check_admin():
-        return html_page("<h2>⛔ Нет доступа</h2><p>Нужен token.</p>"), 403
+        return html_page("<h2>⛔ Нет доступа</h2>"), 403
 
     try:
         sid = int(request.form.get("id", "0"))
@@ -2405,16 +2205,217 @@ def admin_specials_delete_post():
     conn.commit()
     conn.close()
 
-    office = (request.form.get("office", OFFICES[0]) or "").strip()
-    if office not in OFFICES:
-        office = OFFICES[0]
     d = (request.form.get("date", date.today().isoformat()) or "").strip()
+    return redirect(f"/admin/specials?date={d}&token={ADMIN_TOKEN}")
 
-    return redirect(f"/admin/specials?office={office}&date={d}&token={ADMIN_TOKEN}")
+
+# ===========================
+# ✅ Управление супами через админку
+# ===========================
+
+@app.get("/admin/soups")
+def admin_soups_get():
+    if not check_admin():
+        return html_page("<h2>⛔ Нет доступа</h2><p>Нужен token.</p>"), 403
+
+    conn = db()
+    rows = conn.execute(
+        "SELECT * FROM admin_soups ORDER BY sort_order ASC, id ASC"
+    ).fetchall()
+    conn.close()
+
+    list_html = ""
+    for r in rows:
+        active_checked = "checked" if r["active"] else ""
+        en_part = r["title_en"] or ""
+        display = f"{r['title_ru']} / {en_part}" if en_part else r["title_ru"]
+        list_html += f"""
+        <tr>
+          <td><b>{r['id']}</b></td>
+          <td>{display}</td>
+          <td style="text-align:center;">{'✅' if r['active'] else '❌'}</td>
+          <td style="text-align:center;">{r['sort_order']}</td>
+          <td>
+            <form method="post" action="/admin/soups/toggle?token={ADMIN_TOKEN}" style="display:inline;">
+              <input type="hidden" name="id" value="{r['id']}">
+              <button class="btn-primary" type="submit" style="margin-top:0; padding:6px 12px; font-size:13px;">
+                {'Скрыть' if r['active'] else 'Показать'}
+              </button>
+            </form>
+            &nbsp;
+            <form method="post" action="/admin/soups/delete?token={ADMIN_TOKEN}" style="display:inline;" onsubmit="return confirm('Удалить суп?');">
+              <input type="hidden" name="id" value="{r['id']}">
+              <button class="btn-danger" type="submit" style="margin-top:0; padding:6px 12px; font-size:13px;">Удалить</button>
+            </form>
+          </td>
+        </tr>
+        """
+
+    if not list_html:
+        list_html = "<tr><td colspan='5' class='muted'>Супы не добавлены (используется встроенный список)</td></tr>"
+
+    body = f"""
+    <h1>Управление супами</h1>
+
+    <div class="card">
+      <p><a href="/admin?token={ADMIN_TOKEN}">← Назад в админку</a></p>
+      <p class="muted">Если список пустой — в форме заказа используются супы по умолчанию из кода.<br>
+      Добавленные супы полностью заменяют встроенный список.</p>
+    </div>
+
+    <div class="card">
+      <h3>Добавить суп</h3>
+      <form method="post" action="/admin/soups/create?token={ADMIN_TOKEN}">
+        <div class="row">
+          <div>
+            <label>Название (RU) *</label>
+            <input name="title_ru" placeholder="Борщ" required>
+          </div>
+          <div>
+            <label>Название (EN, необязательно)</label>
+            <input name="title_en" placeholder="Borscht">
+          </div>
+        </div>
+        <label>Порядок сортировки (0 = первый)</label>
+        <input name="sort_order" type="number" value="0" min="0" style="max-width:120px;">
+        <button class="btn-primary" type="submit">Добавить суп</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <h3>Текущие супы ({len(rows)} шт.)</h3>
+      <table class="admin-table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Название</th>
+            <th style="text-align:center;">Активен</th>
+            <th style="text-align:center;">Порядок</th>
+            <th>Действия</th>
+          </tr>
+        </thead>
+        <tbody>{list_html}</tbody>
+      </table>
+    </div>
+    """
+    return html_page(body)
+
+
+@app.post("/admin/soups/create")
+def admin_soups_create():
+    if not check_admin():
+        return html_page("<h2>⛔ Нет доступа</h2>"), 403
+
+    title_ru = (request.form.get("title_ru", "") or "").strip()
+    title_en = (request.form.get("title_en", "") or "").strip()
+    if not title_ru:
+        return html_page("<p class='danger'>Ошибка: название (RU) обязательно.</p><p><a href='/admin/soups?token={ADMIN_TOKEN}'>Назад</a></p>"), 400
+
+    try:
+        sort_order = int(request.form.get("sort_order", "0"))
+        if sort_order < 0:
+            sort_order = 0
+    except ValueError:
+        sort_order = 0
+
+    conn = db()
+    conn.execute(
+        "INSERT INTO admin_soups(title_ru, title_en, sort_order, active, created_at) VALUES (?,?,?,1,?)",
+        (title_ru, title_en, sort_order, datetime.utcnow().isoformat()),
+    )
+    conn.commit()
+    conn.close()
+
+    return redirect(f"/admin/soups?token={ADMIN_TOKEN}")
+
+
+@app.post("/admin/soups/toggle")
+def admin_soups_toggle():
+    if not check_admin():
+        return html_page("<h2>⛔ Нет доступа</h2>"), 403
+
+    try:
+        sid = int(request.form.get("id", "0"))
+    except ValueError:
+        sid = 0
+    if sid <= 0:
+        return redirect(f"/admin/soups?token={ADMIN_TOKEN}")
+
+    conn = db()
+    row = conn.execute("SELECT active FROM admin_soups WHERE id=?", (sid,)).fetchone()
+    if row:
+        new_active = 0 if row["active"] else 1
+        conn.execute("UPDATE admin_soups SET active=? WHERE id=?", (new_active, sid))
+        conn.commit()
+    conn.close()
+
+    return redirect(f"/admin/soups?token={ADMIN_TOKEN}")
+
+
+@app.post("/admin/soups/delete")
+def admin_soups_delete():
+    if not check_admin():
+        return html_page("<h2>⛔ Нет доступа</h2>"), 403
+
+    try:
+        sid = int(request.form.get("id", "0"))
+    except ValueError:
+        sid = 0
+    if sid > 0:
+        conn = db()
+        conn.execute("DELETE FROM admin_soups WHERE id=?", (sid,))
+        conn.commit()
+        conn.close()
+
+    return redirect(f"/admin/soups?token={ADMIN_TOKEN}")
+
+
+# --- CSV export ---
+@app.get("/export.csv")
+def export_csv():
+    if not check_admin():
+        return Response("Forbidden", status=403)
+
+    d_str = request.args.get("date", date.today().isoformat())
+    try:
+        d = date.fromisoformat(d_str)
+    except ValueError:
+        d = date.today()
+
+    conn = db()
+    ensure_columns(conn)
+    rows = conn.execute(
+        "SELECT * FROM orders WHERE office=? AND order_date=? AND status='active' ORDER BY created_at ASC",
+        (OFFICE, d.isoformat()),
+    ).fetchall()
+    conn.close()
+
+    import csv
+    import io
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(["order_code", "office", "order_date", "floor", "name", "phone_raw",
+                     "zakuska", "soup", "hot", "dessert", "drink_label", "bread",
+                     "option_code", "price_eur", "comment", "created_at"])
+    for r in rows:
+        writer.writerow([
+            r["order_code"], r["office"], r["order_date"], r["floor"] or "",
+            r["name"], r["phone_raw"],
+            r["zakuska"] or "", r["soup"], r["hot"] or "", r["dessert"] or "",
+            r["drink_label"] or "", r["bread"] or "",
+            r["option_code"], r["price_eur"], r["comment"] or "", r["created_at"],
+        ])
+
+    return Response(
+        buf.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=orders_{OFFICE}_{d.isoformat()}.csv"},
+    )
 
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+
 
 
 
