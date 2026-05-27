@@ -15,7 +15,7 @@ DB_PATH = os.getenv("DB_PATH", "/tmp/orders.sqlite")
 TZ = ZoneInfo(os.getenv("TZ", "Europe/Madrid"))
 
 MAX_PER_DAY = int(os.getenv("MAX_PER_DAY", "30"))
-CUTOFF_HOUR = int(os.getenv("CUTOFF_HOUR", "11"))  # 11:00
+CUTOFF_HOUR = int(os.getenv("CUTOFF_HOUR", "12"))  # 12:00
 ORDER_PREFIX = os.getenv("ORDER_PREFIX", "VO")
 
 # ✅ Один офис — ALAMEDA
@@ -964,7 +964,7 @@ document.addEventListener("click", (e)=>{
   if (!dateInput) return;
 
   const form = dateInput.closest("form");
-  const CUT_OFF_HOUR = 11;
+  const CUT_OFF_HOUR = 12;
 
   function pad(n){ return String(n).padStart(2,"0"); }
   function ymd(d){ return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
@@ -1022,11 +1022,11 @@ document.addEventListener("click", (e)=>{
     if (selectedYMD !== mustBe){
       showVolgaPopup(
         "Дата заказа выбрана неверно.<br>" +
-        "До 11:00 можно заказать на сегодня.<br>" +
-        "После 11:00 — только на следующий рабочий день.<br><br>" +
+        "До 12:00 можно заказать на сегодня.<br>" +
+        "После 12:00 — только на следующий рабочий день.<br><br>" +
         "Wrong order date.<br>" +
-        "Before 11:00 you can order for today.<br>" +
-        "After 11:00 — only for the next working day."
+        "Before 12:00 you can order for today.<br>" +
+        "After 12:00 — only for the next working day."
       );
       return false;
     }
@@ -1052,6 +1052,92 @@ document.addEventListener("click", (e)=>{
       }
     });
   }
+})();
+</script>
+
+
+<style>
+/* === BANNER 12:00 === */
+#cutoffBannerOverlay{
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,0.5);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  z-index:99999;
+}
+#cutoffBannerBox{
+  background:var(--volga-blue);
+  color:var(--volga-bg);
+  border:4px solid var(--volga-red);
+  padding:28px 32px;
+  max-width:460px;
+  width:92%;
+  text-align:center;
+  line-height:1.5;
+}
+#cutoffBannerBox .banner-title{
+  font-size:22px;
+  font-weight:900;
+  color:var(--volga-bg);
+  margin-bottom:14px;
+}
+#cutoffBannerBox .banner-title span{
+  color:#FFD700;
+}
+#cutoffBannerBox p{
+  margin:6px 0;
+  font-size:15px;
+  font-weight:700;
+}
+#cutoffBannerBox p.en{
+  color:rgba(255,255,255,0.75);
+  font-size:14px;
+  font-weight:600;
+}
+#cutoffBannerBox button{
+  margin-top:20px;
+  padding:12px 32px;
+  border:2px solid var(--volga-bg);
+  background:var(--volga-red);
+  color:var(--volga-bg);
+  font-weight:900;
+  font-size:16px;
+  cursor:pointer;
+}
+#cutoffBannerBox button:hover{
+  background:var(--volga-bg);
+  color:var(--volga-blue);
+}
+</style>
+
+<div id="cutoffBannerOverlay">
+  <div id="cutoffBannerBox">
+    <div class="banner-title">\u231b \u0422\u0435\u043f\u0435\u0440\u044c \u0437\u0430\u043a\u0430\u0437 \u0434\u043e <span>12:00</span></div>
+    <p>\u041c\u044b \u043f\u0440\u043e\u0434\u043b\u0438\u043b\u0438 \u0432\u0440\u0435\u043c\u044f \u043f\u0440\u0438\u0451\u043c\u0430 \u0437\u0430\u043a\u0430\u0437\u043e\u0432!</p>
+    <p>\u0417\u0430\u043a\u0430\u0437\u044b\u0432\u0430\u0439\u0442\u0435 \u0431\u0438\u0437\u043d\u0435\u0441-\u043b\u0430\u043d\u0447 \u0434\u043e <b>12:00</b>.</p>
+    <p class="en">We extended the order time!</p>
+    <p class="en">Order your business lunch before <b>12:00</b>.</p>
+    <button type="button" onclick="closeCutoffBanner()">\u041f\u043e\u043d\u044f\u0442\u043d\u043e / Got it</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  var BANNER_KEY = 'volga_cutoff12_seen';
+  function closeCutoffBanner(){
+    var el = document.getElementById('cutoffBannerOverlay');
+    if(el) el.style.display = 'none';
+    try{ localStorage.setItem(BANNER_KEY, '1'); }catch(e){}
+  }
+  window.closeCutoffBanner = closeCutoffBanner;
+  try{
+    if(localStorage.getItem(BANNER_KEY)){
+      var el = document.getElementById('cutoffBannerOverlay');
+      if(el) el.style.display = 'none';
+    }
+  }catch(e){}
 })();
 </script>
 
@@ -1110,8 +1196,8 @@ def form():
 </h1>
 
 <p class="lead">
-  Доставка в 13:00. Заказ до 11:00.<br>
-  <span class="en">Delivery at 13:00. Order before 11:00.</span>
+  Доставка в 13:00. Заказ до 12:00.<br>
+  <span class="en">Delivery at 13:00. Order before 12:00.</span>
 </p>
 
 <p class="hours">
@@ -1240,7 +1326,7 @@ def order():
         if is_closed_day(d):
             return html_page("<p class='danger'><b>В понедельник мы не работаем.</b><br><small>We are closed on Mondays.</small></p><p><a href='/'>Назад / Back</a></p>"), 403
         return html_page(
-            f"<p class='danger'><b>Приём заказов открыт на сегодня до 11:00. На завтра после 11:00.</b><br>"
+            f"<p class='danger'><b>Приём заказов открыт на сегодня до 12:00. На завтра после 12:00.</b><br>"
             f"<small>Доступно: {start.strftime('%d.%m %H:%M')} — {end.strftime('%d.%m %H:%M')}. Сейчас: {now_.strftime('%d.%m %H:%M')}.</small></p>"
             f"<p><a href='/'>Назад / Back</a></p>"
         ), 403
@@ -2415,8 +2501,6 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
-
-
 
 
 
