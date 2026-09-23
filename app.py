@@ -176,18 +176,14 @@ def init_db():
         )
     """)
 
-    # Цены à la carte по категориям (по умолчанию)
+    # Цены à la carte по конкретным блюдам
     conn.execute("""
         CREATE TABLE IF NOT EXISTS alacarte_prices (
-            category TEXT PRIMARY KEY,
+            item_key TEXT PRIMARY KEY,
+            category TEXT NOT NULL,
             price_eur REAL NOT NULL DEFAULT 0
         )
     """)
-    for cat in ["zakuska", "soup", "hot", "dessert"]:
-        conn.execute(
-            "INSERT OR IGNORE INTO alacarte_prices(category, price_eur) VALUES (?,?)",
-            (cat, 0.0)
-        )
 
     ensure_columns(conn)
     conn.commit()
@@ -320,11 +316,16 @@ def get_seasonal_items(category):
 
 
 def get_alacarte_prices():
-    """Словарь category->price_eur."""
+    """Словарь item_key->price_eur."""
     conn = db()
-    rows = conn.execute("SELECT category, price_eur FROM alacarte_prices").fetchall()
+    rows = conn.execute("SELECT item_key, price_eur FROM alacarte_prices").fetchall()
     conn.close()
-    return {r["category"]: float(r["price_eur"]) for r in rows}
+    return {r["item_key"]: float(r["price_eur"]) for r in rows}
+
+def make_item_key(item_label):
+    """Создаём ключ из названия блюда — берём RU часть без спецсимволов."""
+    ru = item_label.split(" / ")[0].strip().replace(" 🌿", "")
+    return ru[:80]
 
 
 def menu_for_category(category, d=None):
@@ -365,10 +366,9 @@ def alacarte_price_for_item(item_label, category, alacarte_prices, d=None):
     Возвращает цену за конкретное блюдо в режиме à la carte.
     Сезонные — своя цена из seasonal_items.
     Блюдо недели — своя цена из weekly_special.
-    Остальные — цена категории из alacarte_prices.
+    Остальные — цена из alacarte_prices по item_key.
     """
     if item_label.endswith(" 🌿"):
-        # Сезонное блюдо — ищем в БД
         conn = db()
         rows = conn.execute(
             "SELECT alacarte_price_eur, title_ru, title_en FROM seasonal_items WHERE category=? AND active=1",
@@ -381,14 +381,15 @@ def alacarte_price_for_item(item_label, category, alacarte_prices, d=None):
             lbl = f"{ru} / {en}" if en else ru
             if item_label == lbl + " 🌿":
                 return float(r["alacarte_price_eur"])
-        return alacarte_prices.get(category, 0.0)
+        return 0.0
 
     if item_label.startswith("Блюдо недели:") and d:
         special = get_weekly_special(d)
         if special:
             return float(special["alacarte_price_eur"] or 0)
 
-    return alacarte_prices.get(category, 0.0)
+    key = make_item_key(item_label)
+    return alacarte_prices.get(key, 0.0)
 
 
 def hot_menu_with_special(d):
@@ -746,19 +747,19 @@ def form():
 
     # Build à la carte section
     def ac_category_html(cat, items, label):
-        price = ac_prices.get(cat, 0.0)
         html = f'<div class="alacarte-cat"><div class="alacarte-cat-title">{label}</div>'
-        for item in items:
-            iid = f"ac_{cat}_{items.index(item)}"
+        for idx, item in enumerate(items):
+            iid = f"ac_{cat}_{idx}"
             is_seasonal = item.endswith(" 🌿")
             is_special = item.startswith("Блюдо недели:")
 
             if is_seasonal:
-                item_price = seasonal_prices.get(item, price)
+                item_price = seasonal_prices.get(item, 0.0)
             elif is_special:
                 item_price = special_alacarte_price
             else:
-                item_price = price
+                # Ищем по item_key в ac_prices
+                item_price = ac_prices.get(make_item_key(item), 0.0)
 
             badge = '<span class="seasonal-badge">сезон</span>' if is_seasonal else ''
             item_display = item.replace(" 🌿", "")
@@ -2215,39 +2216,115 @@ def admin_seasonal_delete():
     return redirect(f"/admin/seasonal?token={ADMIN_TOKEN}")
 
 
-# --- À la carte prices ---
+# --- À la carte prices (per dish) ---
+
+def _all_menu_items_for_alacarte(d=None):
+    """
+    Возвращает список (category, item_label, item_key) для всех блюд меню
+    кроме сезонных и блюда недели (у них своя цена).
+    """
+    if d is None:
+        d = date.today()
+    items = []
+    # zakuska
+    for item in MENU["zakuska"]:
+        items.append(("zakuska", item, make_item_key(item)))
+    # soups — base + admin_soups
+    for item in get_soups_list():
+        if not item.endswith(" 🌿"):
+            items.append(("soup", item, make_item_key(item)))
+    # hot — base only (special has own price)
+    for item in MENU["hot"]:
+        items.append(("hot", item, make_item_key(item)))
+    # dessert
+    for item in MENU["dessert"]:
+        items.append(("dessert", item, make_item_key(item)))
+    return items
+
+
 @app.get("/admin/alacarte_prices")
 def admin_alacarte_prices_get():
     if not check_admin():
         return html_page("<h2>⛔ Нет доступа</h2>"), 403
+
     conn = db()
-    rows = conn.execute("SELECT category, price_eur FROM alacarte_prices ORDER BY category").fetchall()
+    rows = conn.execute("SELECT item_key, price_eur FROM alacarte_prices").fetchall()
     conn.close()
+    saved = {r["item_key"]: float(r["price_eur"]) for r in rows}
 
-    prices = {r["category"]: float(r["price_eur"]) for r in rows}
+    all_items = _all_menu_items_for_alacarte()
 
-    fields = "".join([f"""
-    <div style="margin-bottom:14px;">
-      <label>{CAT_NAMES.get(cat, cat)}</label>
-      <input name="{cat}" type="number" min="0" step="0.5" value="{prices.get(cat, 0):.2f}"
-             style="max-width:160px;" required>
-      <small>Цена по умолчанию для всех блюд этой категории</small>
+    # Group by category for display
+    cats_html = ""
+    prev_cat = None
+    for cat, label, key in all_items:
+        if cat != prev_cat:
+            if prev_cat is not None:
+                cats_html += "</div>"
+            cats_html += f"""
+            <div class="card" style="margin-bottom:12px;">
+              <h3 style="margin:0 0 16px 0; color:var(--volga-blue);">{CAT_NAMES.get(cat, cat)}</h3>
+            """
+            prev_cat = cat
+
+        price = saved.get(key, 0.0)
+        # Show only RU part for cleaner display
+        display = label.split(" / ")[0] if " / " in label else label
+
+        cats_html += f"""
+        <div style="display:flex; align-items:center; justify-content:space-between;
+                    gap:12px; padding:10px 0; border-bottom:1px solid #e8e0d0; flex-wrap:wrap;">
+          <div style="font-size:14px; color:var(--volga-blue); font-weight:600; flex:1; min-width:180px;">
+            {display}
+          </div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <input type="number" name="price_{key}" value="{price:.2f}"
+                   min="0" step="0.5"
+                   style="width:100px; padding:8px; font-size:15px; font-weight:700;
+                          text-align:right; border:2px solid var(--volga-blue); background:var(--volga-bg);">
+            <span style="font-size:14px; font-weight:800; color:var(--volga-blue);">€</span>
+          </div>
+        </div>
+        <input type="hidden" name="key_{key}" value="{key}">
+        <input type="hidden" name="cat_{key}" value="{cat}">
+        """
+
+    if prev_cat:
+        cats_html += "</div>"
+
+    # Weekly special note
+    special_note = """
+    <div class="card" style="background:var(--volga-bg);">
+      <p style="font-size:13px; color:var(--volga-burgundy);">
+        ⭐ <b>Блюдо недели</b> — цена à la carte задаётся отдельно в разделе
+        <a href="/admin/specials?token=__TOKEN__">«Блюдо недели»</a>.<br>
+        🌿 <b>Сезонные блюда</b> — цена à la carte задаётся при добавлении в
+        <a href="/admin/seasonal?token=__TOKEN__">«Сезонные блюда»</a>.
+      </p>
     </div>
-    """ for cat in ["zakuska", "soup", "hot", "dessert"]])
+    """.replace("__TOKEN__", ADMIN_TOKEN)
 
     body = f"""
     <h1>💰 Цены «Блюда отдельно»</h1>
     <div class="card">
       <p><a href="/admin?token={ADMIN_TOKEN}">← Назад в админку</a></p>
-      <p class="muted">Это цены по умолчанию для каждой категории. Сезонные блюда и блюдо недели имеют свои цены, которые задаются отдельно.</p>
+      <p class="muted" style="margin-top:8px;">
+        Установите цену для каждого блюда. Цена 0,00€ означает что блюдо показывается бесплатно —
+        не забудьте заполнить перед запуском.
+      </p>
     </div>
-    <div class="card">
-      <h3>Установить цены</h3>
-      <form method="post" action="/admin/alacarte_prices/save?token={ADMIN_TOKEN}">
-        {fields}
-        <button class="btn-primary" type="submit">Сохранить</button>
-      </form>
-    </div>"""
+
+    <form method="post" action="/admin/alacarte_prices/save?token={ADMIN_TOKEN}">
+      {cats_html}
+      <div class="card">
+        <button class="btn-primary" type="submit" style="max-width:300px;">
+          💾 Сохранить все цены
+        </button>
+      </div>
+    </form>
+
+    {special_note}
+    """
     return html_page(body)
 
 
@@ -2255,16 +2332,26 @@ def admin_alacarte_prices_get():
 def admin_alacarte_prices_save():
     if not check_admin():
         return html_page("<h2>⛔ Нет доступа</h2>"), 403
+
+    all_items = _all_menu_items_for_alacarte()
+    keys = {key for _, _, key in all_items}
+
     conn = db()
-    for cat in ["zakuska", "soup", "hot", "dessert"]:
+    for key in keys:
+        price_str = request.form.get(f"price_{key}", "0")
+        cat = request.form.get(f"cat_{key}", "")
         try:
-            price = float(request.form.get(cat, "0"))
+            price = float(price_str)
             if price < 0: raise ValueError
         except ValueError:
             conn.close()
-            return html_page(f"<p class='danger'>Неверная цена для {cat}.</p>"), 400
-        conn.execute("INSERT OR REPLACE INTO alacarte_prices(category, price_eur) VALUES(?,?)", (cat, price))
-    conn.commit(); conn.close()
+            return html_page(f"<p class='danger'>Неверная цена для {key}.</p>"), 400
+        conn.execute(
+            "INSERT OR REPLACE INTO alacarte_prices(item_key, category, price_eur) VALUES(?,?,?)",
+            (key, cat, price)
+        )
+    conn.commit()
+    conn.close()
     return redirect(f"/admin/alacarte_prices?token={ADMIN_TOKEN}")
 
 
