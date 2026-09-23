@@ -108,6 +108,19 @@ def ensure_columns(conn):
     if "alacarte_price_eur" not in ws_cols:
         conn.execute("ALTER TABLE weekly_special ADD COLUMN alacarte_price_eur REAL DEFAULT 0")
 
+    # alacarte_prices: migrate from category-based to item_key-based
+    ac_cols = {r["name"] for r in conn.execute("PRAGMA table_info(alacarte_prices)").fetchall()}
+    if "item_key" not in ac_cols:
+        # Old table has (category PRIMARY KEY, price_eur) — drop and recreate
+        conn.execute("DROP TABLE IF EXISTS alacarte_prices")
+        conn.execute("""
+            CREATE TABLE alacarte_prices (
+                item_key TEXT PRIMARY KEY,
+                category TEXT NOT NULL,
+                price_eur REAL NOT NULL DEFAULT 0
+            )
+        """)
+
 
 def init_db():
     conn = db()
