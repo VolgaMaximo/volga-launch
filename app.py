@@ -632,13 +632,32 @@ a:hover{ color:var(--volga-red); }
 /* PRINT */
 @media print{
   .no-print{ display:none !important; }
-  body{ margin:0; background:#fff !important; }
-  .card{ border:none; margin:0; padding:0; background:#fff !important; }
-  table,th,td{ background:#fff !important; border-color:#000 !important; }
-  .admin-table th{ background:#fff !important; color:#000 !important; }
+  body{ margin:0 !important; background:#fff !important; color:#000 !important; }
+  .card{ border:1px solid #ccc !important; margin:4px 0 !important; padding:8px !important; background:#fff !important; box-shadow:none !important; }
+  /* Убираем все фоны — экономим картридж */
+  *{ background:#fff !important; color:#000 !important;
+     -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  /* Таблицы — только тонкие чёрные линии */
+  table,th,td{ background:#fff !important; color:#000 !important; border-color:#999 !important; }
+  .admin-table th{ background:#fff !important; color:#000 !important; font-weight:800; border-bottom:2px solid #000 !important; }
   .admin-table td{ color:#000 !important; }
-  *{ -webkit-print-color-adjust:economy; print-color-adjust:economy; }
-  a{ color:#000; text-decoration:none; }
+  /* Убираем декоративные элементы */
+  .mode-switcher{ display:none !important; }
+  .btn-primary,.btn-danger,.btn-confirm,.btn-edit{ display:none !important; }
+  a{ color:#000 !important; text-decoration:none !important; }
+  /* Шапка страницы — только текст */
+  .hero-title .ru,.hero-title .en{ color:#000 !important; }
+  .lead,.hours{ color:#000 !important; }
+  .lead .en,.hours .en,.hours .ru{ color:#000 !important; }
+  /* Пилюли */
+  .pill{ border-color:#999 !important; color:#000 !important; }
+  /* Значки типа заказа */
+  .tag-complex,.tag-alacarte{ background:#fff !important; color:#000 !important; border:1px solid #999; }
+  /* Скрыть баннеры и попапы */
+  #alacarteBannerOverlay,#volgaPopupOverlay{ display:none !important; }
+  /* Компактнее для печати */
+  .admin-table{ font-size:11px !important; }
+  .admin-table th,.admin-table td{ padding:5px 7px !important; }
 }
 </style>
 """
