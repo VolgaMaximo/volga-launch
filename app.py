@@ -108,6 +108,11 @@ def ensure_columns(conn):
     if "alacarte_price_eur" not in ws_cols:
         conn.execute("ALTER TABLE weekly_special ADD COLUMN alacarte_price_eur REAL DEFAULT 0")
 
+    # seasonal_items: add surcharge_eur if missing
+    si_cols = {r["name"] for r in conn.execute("PRAGMA table_info(seasonal_items)").fetchall()}
+    if "surcharge_eur" not in si_cols and si_cols:
+        conn.execute("ALTER TABLE seasonal_items ADD COLUMN surcharge_eur REAL DEFAULT 0")
+
     # alacarte_prices: migrate from category-based to item_key-based
     ac_cols = {r["name"] for r in conn.execute("PRAGMA table_info(alacarte_prices)").fetchall()}
     if "item_key" not in ac_cols:
@@ -184,6 +189,7 @@ def init_db():
             title_ru TEXT NOT NULL,
             title_en TEXT NOT NULL,
             alacarte_price_eur REAL NOT NULL DEFAULT 0,
+            surcharge_eur REAL NOT NULL DEFAULT 0,
             active INTEGER NOT NULL DEFAULT 1,
             created_at TEXT NOT NULL
         )
@@ -368,6 +374,9 @@ def menu_for_category(category, d=None):
         en = (s["title_en"] or "").strip()
         ru = (s["title_ru"] or "").strip()
         lbl = f"{ru} / {en}" if en else ru
+        surcharge = float(s["surcharge_eur"] or 0)
+        if surcharge > 0:
+            lbl += f" (+{surcharge:.0f}€)"
         lbl += " 🌿"  # маркер сезонного
         items.append(lbl)
 
@@ -433,6 +442,27 @@ def compute_option_base_price(zakuska, soup, hot, dessert, d):
         special = get_weekly_special(d)
         if special:
             price += float(int(special["surcharge_eur"]))
+
+    # Доплата за сезонное блюдо в любой категории
+    for dish, category in [(zakuska,"zakuska"),(soup,"soup"),(hot,"hot"),(dessert,"dessert")]:
+        if dish and dish.endswith(" 🌿") and "(" not in dish.split("🌿")[0].strip():
+            # label без доплаты в скобках
+            pass
+        if dish and "🌿" in dish:
+            conn = db()
+            rows = conn.execute(
+                "SELECT surcharge_eur, title_ru, title_en FROM seasonal_items WHERE category=? AND active=1",
+                (category,)
+            ).fetchall()
+            conn.close()
+            for r in rows:
+                en = (r["title_en"] or "").strip()
+                ru = (r["title_ru"] or "").strip()
+                # dish может быть "Окрошка / Okroshka (+2€) 🌿" или "Окрошка / Okroshka 🌿"
+                # проверяем по ru-части
+                if dish.startswith(ru):
+                    price += float(r["surcharge_eur"] or 0)
+                    break
 
     return option, float(price), None
 
@@ -2121,11 +2151,14 @@ def admin_seasonal_get():
     for r in rows:
         en = r["title_en"] or ""
         display = f"{r['title_ru']} / {en}" if en else r["title_ru"]
+        surcharge = float(r["surcharge_eur"] or 0)
+        surcharge_str = f"+{surcharge:.2f}€" if surcharge > 0 else "—"
         list_html += f"""<tr>
           <td><b>{r['id']}</b></td>
           <td>{CAT_NAMES.get(r['category'], r['category'])}</td>
           <td>{display}</td>
           <td style="text-align:right;">{float(r['alacarte_price_eur']):.2f}€</td>
+          <td style="text-align:right;">{surcharge_str}</td>
           <td style="text-align:center;">{'✅' if r['active'] else '❌'}</td>
           <td>
             <form method="post" action="/admin/seasonal/toggle?token={ADMIN_TOKEN}" style="display:inline;">
@@ -2156,13 +2189,23 @@ def admin_seasonal_get():
       <form method="post" action="/admin/seasonal/create?token={ADMIN_TOKEN}">
         <div class="row">
           <div><label>Категория</label><select name="category" required>{cat_opts}</select></div>
-          <div><label>Цена à la carte, €</label>
-               <input name="alacarte_price_eur" type="number" min="0" step="0.5" value="0" required>
-               <small>Цена при заказе блюда отдельно</small></div>
+          <div><label>Название (RU) *</label><input name="title_ru" placeholder="Окрошка" required></div>
         </div>
         <div class="row">
-          <div><label>Название (RU) *</label><input name="title_ru" placeholder="Окрошка" required></div>
           <div><label>Название (EN)</label><input name="title_en" placeholder="Okroshka"></div>
+          <div></div>
+        </div>
+        <div class="row">
+          <div>
+            <label>Цена à la carte, €</label>
+            <input name="alacarte_price_eur" type="number" min="0" step="0.5" value="0" required>
+            <small>Цена при заказе блюда отдельно</small>
+          </div>
+          <div>
+            <label>Доплата в бизнес-ланче, €</label>
+            <input name="surcharge_eur" type="number" min="0" step="0.5" value="0" required>
+            <small>0 = без доплаты, входит в стандартную цену опции</small>
+          </div>
         </div>
         <button class="btn-primary" type="submit">Добавить блюдо</button>
       </form>
@@ -2170,7 +2213,7 @@ def admin_seasonal_get():
     <div class="card">
       <h3>Сезонные блюда ({len(rows)} шт.)</h3>
       <table class="admin-table">
-        <thead><tr><th>ID</th><th>Категория</th><th>Название</th><th style="text-align:right;">À la carte</th><th style="text-align:center;">Активно</th><th>Действия</th></tr></thead>
+        <thead><tr><th>ID</th><th>Категория</th><th>Название</th><th style="text-align:right;">À la carte</th><th style="text-align:right;">Доплата ланч</th><th style="text-align:center;">Активно</th><th>Действия</th></tr></thead>
         <tbody>{list_html}</tbody>
       </table>
     </div>"""
@@ -2190,13 +2233,14 @@ def admin_seasonal_create():
         return html_page("<p class='danger'>Название обязательно.</p>"), 400
     try:
         price = float(request.form.get("alacarte_price_eur","0"))
-        if price < 0: raise ValueError
+        surcharge = float(request.form.get("surcharge_eur","0"))
+        if price < 0 or surcharge < 0: raise ValueError
     except ValueError:
         return html_page("<p class='danger'>Неверная цена.</p>"), 400
     conn = db()
     conn.execute(
-        "INSERT INTO seasonal_items(category,title_ru,title_en,alacarte_price_eur,active,created_at) VALUES(?,?,?,?,1,?)",
-        (category, title_ru, title_en, price, datetime.utcnow().isoformat())
+        "INSERT INTO seasonal_items(category,title_ru,title_en,alacarte_price_eur,surcharge_eur,active,created_at) VALUES(?,?,?,?,?,1,?)",
+        (category, title_ru, title_en, price, surcharge, datetime.utcnow().isoformat())
     )
     conn.commit(); conn.close()
     return redirect(f"/admin/seasonal?token={ADMIN_TOKEN}")
