@@ -213,6 +213,20 @@ init_db()
 
 
 # ---------------------------
+# Telegram WebView fix
+# ---------------------------
+@app.after_request
+def add_headers(response):
+    # Позволяем открывать в любом WebView включая Telegram
+    response.headers["X-Frame-Options"] = "SAMEORIGIN"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    # Не кешировать страницы заказов
+    if request.path in ('/', '/order', '/edit', '/cancel'):
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    return response
+
+
+# ---------------------------
 # Helpers
 # ---------------------------
 def now_local():
@@ -445,10 +459,7 @@ def compute_option_base_price(zakuska, soup, hot, dessert, d):
 
     # Доплата за сезонное блюдо в любой категории
     for dish, category in [(zakuska,"zakuska"),(soup,"soup"),(hot,"hot"),(dessert,"dessert")]:
-        if dish and dish.endswith(" 🌿") and "(" not in dish.split("🌿")[0].strip():
-            # label без доплаты в скобках
-            pass
-        if dish and "🌿" in dish:
+        if dish and ("🌿" in dish or "[seasonal]" in dish):
             conn = db()
             rows = conn.execute(
                 "SELECT surcharge_eur, title_ru, title_en FROM seasonal_items WHERE category=? AND active=1",
@@ -826,9 +837,11 @@ def form():
             badge = '<span class="seasonal-badge">сезон</span>' if is_seasonal else ''
             item_display = item.replace(" 🌿", "")
 
+            # Убираем emoji из value чтобы не было проблем в Telegram WebView
+            safe_item = item.replace(" 🌿", "[seasonal]")
             html += f"""
             <div class="alacarte-item" id="wrap_{iid}" onclick="toggleAC('{iid}')">
-              <input type="checkbox" name="ac_item" value="{item}|{cat}|{item_price}"
+              <input type="checkbox" name="ac_item" value="{safe_item}|{cat}|{item_price}"
                      id="{iid}" onchange="updateACTotal()" onclick="event.stopPropagation()">
               <label for="{iid}">{item_display}{badge}</label>
               <span class="price-tag">{item_price:.2f}€</span>
@@ -1212,6 +1225,8 @@ def order():
             parts = raw.split("|")
             if len(parts) == 3:
                 item_name, cat, price_str = parts
+                # Восстанавливаем emoji маркер сезонного блюда
+                item_name = item_name.replace("[seasonal]", " 🌿").strip()
                 try:
                     price_val = float(price_str)
                 except ValueError:
@@ -2466,6 +2481,37 @@ def export_csv():
 
     return Response(buf.getvalue(), mimetype="text/csv",
                     headers={"Content-Disposition": f"attachment; filename=orders_{OFFICE}_{d.isoformat()}.csv"})
+
+
+# ---------------------------
+# Error handlers
+# ---------------------------
+import traceback
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    """Показываем читаемую ошибку вместо голого 500."""
+    tb = traceback.format_exc()
+    # Логируем в stderr (видно в Render Logs)
+    import sys
+    print(f"[ERROR] {e}\n{tb}", file=sys.stderr)
+
+    # Пользователю — понятная страница
+    return html_page(f"""
+    <h2 style="color:var(--volga-red);">⚠️ Что-то пошло не так</h2>
+    <div class="card">
+      <p>Произошла ошибка при обработке заказа. Попробуйте ещё раз.</p>
+      <p><small>If the error persists, please try opening the page in your main browser instead of Telegram.</small></p>
+      <p style="margin-top:12px;"><a href="/">← На главную / Back to home</a></p>
+    </div>
+    """), 500
+
+@app.errorhandler(404)
+def handle_404(e):
+    return html_page("""
+    <h2>404 — Страница не найдена</h2>
+    <p><a href="/">← На главную / Back</a></p>
+    """), 404
 
 
 if __name__ == "__main__":
