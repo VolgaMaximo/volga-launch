@@ -113,6 +113,63 @@ def ensure_columns(conn):
     if "surcharge_eur" not in si_cols and si_cols:
         conn.execute("ALTER TABLE seasonal_items ADD COLUMN surcharge_eur REAL DEFAULT 0")
 
+    # orders.soup: remove NOT NULL constraint if present (old schema)
+    # SQLite can't ALTER COLUMN, so we check via PRAGMA and recreate if needed
+    soup_col = [r for r in conn.execute("PRAGMA table_info(orders)").fetchall() if r["name"] == "soup"]
+    if soup_col and soup_col[0]["notnull"] == 1:
+        # Пересоздаём таблицу без NOT NULL на soup
+        conn.execute("ALTER TABLE orders RENAME TO orders_old")
+        conn.execute("""
+            CREATE TABLE orders (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                order_code TEXT NOT NULL UNIQUE,
+                office TEXT NOT NULL,
+                order_date TEXT NOT NULL,
+                floor TEXT,
+                name TEXT NOT NULL,
+                phone_raw TEXT NOT NULL,
+                phone_norm TEXT NOT NULL,
+                zakuska TEXT,
+                soup TEXT,
+                hot TEXT,
+                dessert TEXT,
+                bread TEXT,
+                option_code TEXT,
+                price_eur REAL NOT NULL,
+                comment TEXT,
+                status TEXT NOT NULL DEFAULT 'active',
+                created_at TEXT NOT NULL,
+                order_type TEXT NOT NULL DEFAULT 'complex',
+                alacarte_items TEXT,
+                drink_code TEXT,
+                drink_label TEXT,
+                drink_price_eur REAL
+            )
+        """)
+        conn.execute("""
+            INSERT INTO orders(
+                id, order_code, office, order_date, floor,
+                name, phone_raw, phone_norm,
+                zakuska, soup, hot, dessert, bread,
+                option_code, price_eur, comment, status, created_at,
+                order_type, alacarte_items, drink_code, drink_label, drink_price_eur
+            )
+            SELECT
+                id, order_code, office, order_date,
+                CASE WHEN typeof(floor)='null' THEN NULL ELSE floor END,
+                name, phone_raw, phone_norm,
+                zakuska, soup, hot, dessert, bread,
+                option_code, price_eur, comment, status, created_at,
+                COALESCE(order_type,'complex'),
+                CASE WHEN typeof(alacarte_items)='null' THEN NULL ELSE alacarte_items END,
+                CASE WHEN typeof(drink_code)='null' THEN NULL ELSE drink_code END,
+                CASE WHEN typeof(drink_label)='null' THEN NULL ELSE drink_label END,
+                CASE WHEN typeof(drink_price_eur)='null' THEN NULL ELSE drink_price_eur END
+            FROM orders_old
+        """)
+        conn.execute("DROP TABLE orders_old")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_orders_office_date ON orders(office, order_date)")
+
     # alacarte_prices: migrate from category-based to item_key-based
     ac_cols = {r["name"] for r in conn.execute("PRAGMA table_info(alacarte_prices)").fetchall()}
     if "item_key" not in ac_cols:
@@ -2512,6 +2569,10 @@ def handle_404(e):
     <h2>404 — Страница не найдена</h2>
     <p><a href="/">← На главную / Back</a></p>
     """), 404
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT","5000")), debug=True)
 
 
 if __name__ == "__main__":
