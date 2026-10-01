@@ -1231,8 +1231,10 @@ document.getElementById('formAlacarte').addEventListener('submit', function(e){{
 # ---------------------------
 # POST /order
 # ---------------------------
-@app.post("/order")
+@app.route("/order", methods=["GET", "POST"])
 def order():
+    if request.method == "GET":
+        return redirect("/")
     order_type = (request.form.get("order_type", "complex") or "complex").strip()
 
     d_str = (request.form.get("order_date", "") or "").strip()
@@ -1620,8 +1622,10 @@ def edit_get():
     return html_page(body)
 
 
-@app.post("/edit")
+@app.route("/edit", methods=["GET", "POST"])
 def edit_post():
+    if request.method == "GET":
+        return redirect("/edit")
     order_date = (request.form.get("order_date", "") or "").strip()
     try:
         d = date.fromisoformat(order_date)
@@ -1688,8 +1692,10 @@ def edit_post():
     """)
 
 
-@app.post("/cancel")
+@app.route("/cancel", methods=["GET", "POST"])
 def cancel_post():
+    if request.method == "GET":
+        return redirect("/edit")
     order_date = (request.form.get("order_date", "") or "").strip()
     try:
         d = date.fromisoformat(order_date)
@@ -2569,10 +2575,6 @@ def handle_404(e):
     <h2>404 — Страница не найдена</h2>
     <p><a href="/">← На главную / Back</a></p>
     """), 404
-
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT","5000")), debug=True)
 
 
 if __name__ == "__main__":
